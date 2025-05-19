@@ -4,10 +4,10 @@
 import flask
 import sqlite3
 
-App = flask.Flask(__name__)
+App = flask.Flask(__name__,static_url_path="/static")
 
 @App.route("/")
 def LandingPage():
-    return "Hello this is a test , If you are seeing this then it means Anti-Furry forums are under development"
+    return open("pages/landing.html").read()
 
 App.run(port=80)
