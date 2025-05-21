@@ -70,10 +70,9 @@ def LandingPage():
 # Check if there is already a user with that username
 # Check if the given username respects all constraints: lenght of 25 , no spaces , no special char like 'forbidden_chars'
 
-# TODO: Login function with all contstarints , View user function , Delete user function
+# TODO:View user function , Delete user functions
 @App.route("/api/signup",methods=["POST"])
 def SignupApi():
-
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
     
@@ -88,7 +87,7 @@ def SignupApi():
     
     if not request.json.get("username") or not request.json.get("password"):
         utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request idoes not have either a 'username' or 'password'"}),400
+        return jsonify({"Error":"This request does not have either a 'username' or 'password'"}),400
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
@@ -114,7 +113,46 @@ def SignupApi():
         str(time.time()),
         token
     ))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
 
+    return jsonify({"Message":"Success","Token":token}),200
+
+# Check if ip is blocked
+# Check if it has all parameters needed
+# Check if there is a user with that username
+# Check if the password is correct
+# Return token
+@App.route("/api/login",methods=["GET"])
+def LoginApi():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
+    
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
+        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
+    
+    if not request.args.get("username") or not request.args.get("password"):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request does not have either a 'username' or 'password'"}),400
+    
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT username FROM users WHERE username=?",(request.args.get("username"),)).fetchone() == None):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"No user with such username"}),400
+    
+    enc_pass = hashlib.sha256()
+    enc_pass.update(request.args.get("password").encode())
+    enc_pass = enc_pass.hexdigest()
+
+    row = cursor.execute("SELECT encrypted_password FROM users WHERE username=?", (request.args.get("username"),)).fetchone()
+    if not row or row[0] != enc_pass:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Invalid password"}), 400
+    
+    token = cursor.execute("SELECT token FROM users WHERE username=?", (request.args.get("username"),)).fetchone()[0]
     
     conn.commit()
     cursor.close()
