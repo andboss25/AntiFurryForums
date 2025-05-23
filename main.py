@@ -55,10 +55,18 @@ addr_list = {}
 @App.route("/")
 def LandingPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return "<h1>This ip address is permanently blocked off this site!<h1/>",400
+        return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/landing.html").read()
+
+@App.route("/login")
+def LoginPage():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/login.html").read()
 
 # Users api
 
@@ -70,7 +78,6 @@ def LandingPage():
 # Check if there is already a user with that username
 # Check if the given username respects all constraints: lenght of 25 , no spaces , no special char like 'forbidden_chars'
 
-# TODO:View user function , Delete user functions
 @App.route("/api/signup",methods=["POST"])
 def SignupApi():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
@@ -118,6 +125,8 @@ def SignupApi():
     cursor.close()
     conn.close()
 
+    utils.GeneralUtils.TrackIp(request.args.get("username"),True,request.path,request.remote_addr)
+
     return jsonify({"Message":"Success","Token":token}),200
 
 # Check if ip is blocked
@@ -158,6 +167,94 @@ def LoginApi():
     cursor.close()
     conn.close()
 
+    utils.GeneralUtils.TrackIp(request.args.get("username"),True,request.path,request.remote_addr)
+
     return jsonify({"Message":"Success","Token":token}),200
+
+# Check if ip is blocked
+# Check if it has all parameters needed
+# Check if the token is valid
+# Get user parameters from given user and if it returns None then display No user found
+@App.route("/api/users/view",methods=["GET"])
+def UserViewApi():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
     
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
+        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
+    
+    if not request.args.get("token") or not request.args.get("username"):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request does not have either a 'token' or 'username'"}),400
+    
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
+        # OPTIMIZATION TODO: Make this get the username from token then check token validity
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Token is invalid"}),400
+    
+    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin FROM users WHERE username=?",(request.args.get("username"),)).fetchone()
+    user_obj = {}
+
+    if user == None:
+        user_obj = {"Message":"No user found!"}
+    else:
+        is_admin = lambda val:False if val == 0 else True
+        user_obj = {
+            "Message":"User was found!",
+            "username":user[0],
+            "display_name":user[1],
+            "bio":user[2],
+            "created_on":user[3],
+            "is_admin":  is_admin(user[4])
+        }
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.args.get("token")),True,request.path,request.remote_addr)
+
+    return jsonify({"Message":"Success","User":user_obj}),200
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the token is valid
+# Delete user with given token
+@App.route("/api/users/delete",methods=["DELETE"])
+def UserDeleteApi():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
+    
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
+        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
+    
+    if not request.is_json:
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request is not identified as JSON"}),400
+    
+    if not request.json.get("token"):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request does not have a token"}),401
+    
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.json.get("token"),)).fetchone() == None):
+        # OPTIMIZATION TODO: Make this get the username from token then check token validity
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Token is invalid"}),400
+    
+    # OPTIMIZATION TODO: Make this get the username from token to delete easier
+    cursor.execute("DELETE FROM users WHERE token=?",(request.json.get("token"),))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),True,request.path,request.remote_addr)
+
+    return jsonify({"Message":"Success"}),200
+
 App.run(port=80)

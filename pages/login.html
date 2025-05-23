@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+
+        input, select, button {
+            width: 300px;
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+        }
+
+        #login-form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #err {
+            margin: 0;
+            color: red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="login-form">
+        <h1>Authenticate</h1>
+        <p id="err">Error</p>
+        <input type="text" id="username" placeholder="Username" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <select id="form-select">
+            <option value="login">Login</option>
+            <option value="signin">Sign In</option>
+        </select>
+        <button type="submit" id="submit" onclick="OnSubmitionOfData()">Submit</button>
+    </div>
+
+    <script>
+    async function OnSubmitionOfData(event) {
+        event?.preventDefault();
+
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value.trim();
+        const action = document.getElementById("form-select").value;
+        const errorElement = document.getElementById("err");
+
+        errorElement.style.display = "none";
+
+        if (!username || !password) {
+            errorElement.innerText = "Please fill all fields";
+            errorElement.style.display = "block";
+            return;
+        }
+
+        let response;
+
+        try {
+            if (action === "login") {
+                response = await fetch('/api/login?' + new URLSearchParams({
+                    username: username,
+                    password: password
+                }), {
+                    method: 'GET'
+                });
+            } else {
+                response = await fetch('/api/signup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: username,
+                        password: password
+                    })
+                });
+            }
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                errorElement.innerText = result.Error || "Something went wrong";
+                errorElement.style.display = "block";
+                return;
+            }
+
+            localStorage.setItem("token", result.Token);
+            window.location.href = "/app"
+        } catch (error) {
+            errorElement.innerText = "Network or server error: " + error.message;
+            errorElement.style.display = "block";
+        }
+
+        document.getElementById("username").value = "";
+        document.getElementById("password").value = "";
+    }
+    </script>
+</body>
+</html>

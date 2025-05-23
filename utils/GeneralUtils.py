@@ -16,14 +16,14 @@ def InnitDB():
 # Don't ask
 # This singular pice of code was made while i was chewing on a pice of plastic
 # Ts function is purely to see if skidfurs will try to attack me
-def TrackIp(usr_id:None,success:bool,path:str,ip):
+def TrackIp(usr_name:None,success:bool,path:str,ip):
     cursor,conn = InnitDB()
     if success == True:
         success = 1
     else:
         success = 0
 
-    cursor.execute("INSERT INTO ip_data(usr_name,success,path,ip,timestamp) VALUES (?,?,?,?,?)",(usr_id,success,path,ip,time.time(),))
+    cursor.execute("INSERT INTO ip_data(usr_name,success,path,ip,timestamp) VALUES (?,?,?,?,?)",(usr_name,success,path,ip,time.time(),))
     conn.commit()
     cursor.close()
     conn.close()
@@ -85,3 +85,9 @@ def CooldownCheck(ip, ips_list , time_frame=10 , request_max_count=20):
     else:
         ips_list[ip] = (now, False, 1)
         return False
+
+def GetUsernameFromToken(token:str):
+    #try:
+        return json.loads(base64.b64decode(token).decode()).get("username")
+    #except:
+    #    return None
