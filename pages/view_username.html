@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{username}}</title>
+    <style>
+        #message {
+            display: none;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="message"></h1>
+    
+    <div id="basic_info">
+        <h2 id="display_name"></h2>
+        <h3 id="username"></h2>
+    </div>
+
+    <div id="basic_info_2">
+        <p id="bio"></p>
+    </div>
+    
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            display: flex;
+            font-family: Arial, Helvetica, sans-serif;
+            flex-direction: column;
+        }
+
+        input, select, button {
+            width: 300px;
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+        }
+
+        h2,h3 {
+            margin: 0px;
+        }
+
+        p {
+            margin: 0px;
+        }
+
+        #username{
+            color:#6e6e6e;
+            font-style: italic;
+        }
+
+        #err {
+            margin: 0;
+            color: red;
+            display: none;
+        }
+
+        #basic_info{
+            background-color: #101010;
+            margin: 10px;
+            padding: 10px;
+        }
+
+        #basic_info_2{
+            background-color: #101010;
+            margin: 10px;
+            padding: 10px;
+        }
+    </style>
+    <script>
+        const username = "{{username}}";
+        console.log(username)
+
+        window.onload = function() {
+            Render(username);
+        };
+
+        async function Render(username) {
+            try {
+                if (localStorage.getItem("token") == null) {
+                    document.location.href = "/login";
+                    return;
+                }
+
+                const response = await fetch('/api/users/view?' + new URLSearchParams({
+                    username: username,
+                    token: localStorage.getItem("token")
+                }), {
+                    method: 'GET'
+                });
+
+                const result = await response.json();
+
+                if (result.User.Message === "User was found!") {
+                    document.getElementById("username").innerText = "@" + result.User.username
+                    document.getElementById("display_name").innerText = result.User.display_name
+                    if (result.User.bio == null){
+                        document.getElementById("bio").innerText = "No bio set by user"
+                    } else {
+                        document.getElementById("bio").innerText = result.User.bio
+                    }
+                } else {
+                    document.getElementById("basic_info").style.display = "None";
+                    document.getElementById("basic_info_2").style.display = "None";
+                    document.getElementById("message").innerText = "User not found!";
+                    document.getElementById("message").style.display = "block";
+                }
+            } catch (err) {
+                console.error("Fetch error:", err);
+                window.location.href = "/login";
+            }
+        }
+    </script>
+</body>
+</html>

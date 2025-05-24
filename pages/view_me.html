@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My account</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            display: flex;
+            font-family: Arial, Helvetica, sans-serif;
+            flex-direction: column;
+        }
+
+        #basic_info {
+            background-color: #101010;
+            margin: 10px;
+            padding: 10px;
+        }
+
+        button {
+            background-color: #4f4f4f;
+            color: white;
+            margin: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            width: calc(100% - 20px);
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #767676;
+        }
+
+        button:active {
+            background-color: #6f6f6f;
+        }
+
+        input, select {
+            width: 100%;
+            margin-top: 10px;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        h2, h3, p {
+            margin: 0;
+        }
+
+        #username {
+            color: #6e6e6e;
+            font-style: italic;
+        }
+
+        #err {
+            margin: 0;
+            color: red;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="basic_info">
+        <h2 id="display_name"></h2>
+        <h3 id="username"></h3>
+    </div>
+
+    <div id="basic_info">
+        <p id="bio"></p>
+    </div>
+
+    <button id="edit">Edit</button>
+
+    <script>
+        const token = localStorage.getItem("token");
+        let editMode = false;
+
+        window.onload = function () {
+            Render(token);
+
+            document.getElementById("edit").addEventListener("click", async () => {
+                if (!editMode) {
+                    enableEditMode();
+                } else {
+                    await saveChanges();
+                }
+            });
+        };
+
+        async function Render(token) {
+            try {
+                if (!token) {
+                    location.href = "/login";
+                    return;
+                }
+
+                const response = await fetch('/api/users/tokendata?' + new URLSearchParams({ token }), {
+                    method: 'GET'
+                });
+
+                const result = await response.json();
+
+                if (result.User?.Message === "User was found!") {
+                    document.getElementById("username").textContent = "@" + result.User.username;
+                    document.getElementById("display_name").textContent = result.User.display_name;
+                    document.getElementById("bio").textContent = result.User.bio || "No bio set by user";
+                } else {
+                    document.getElementById("basic_info").style.display = "none";
+                    location.href = "/login";
+                }
+            } catch (err) {
+                console.error("Fetch error:", err);
+                location.href = "/login";
+            }
+        }
+
+        function enableEditMode() {
+            const displayName = document.getElementById("display_name");
+            const bio = document.getElementById("bio");
+
+            const displayInput = document.createElement("input");
+            displayInput.id = "display_name_input";
+            displayInput.type = "text";
+            displayInput.value = displayName.textContent;
+
+            const bioInput = document.createElement("input");
+            bioInput.id = "bio_input";
+            bioInput.type = "text";
+            bioInput.value = bio.textContent === "No bio set by user" ? "" : bio.textContent;
+
+            displayName.replaceWith(displayInput);
+            bio.replaceWith(bioInput);
+
+            document.getElementById("edit").innerText = "Save";
+            editMode = true;
+        }
+
+        async function saveChanges() {
+            const newDN = document.getElementById("display_name_input").value.trim();
+            const newBio = document.getElementById("bio_input").value.trim();
+
+            if (!token) {
+                alert("You are not logged in.");
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/users/modify", {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ token, display_name: newDN, bio: newBio })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.Message === "Success") {
+                    const displayElem = document.createElement("h2");
+                    displayElem.id = "display_name";
+                    displayElem.textContent = newDN;
+
+                    const bioElem = document.createElement("p");
+                    bioElem.id = "bio";
+                    bioElem.textContent = newBio || "No bio set by user";
+
+                    document.getElementById("display_name_input").replaceWith(displayElem);
+                    document.getElementById("bio_input").replaceWith(bioElem);
+
+                    document.getElementById("edit").innerText = "Edit";
+                    editMode = false;
+                } else {
+                    alert("Error: " + (result.Error || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Update error:", err);
+                alert("Failed to update profile. Please try again later.");
+            }
+        }
+    </script>
+
+</body>
+</html>

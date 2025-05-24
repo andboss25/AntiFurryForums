@@ -87,7 +87,7 @@ def CooldownCheck(ip, ips_list , time_frame=10 , request_max_count=20):
         return False
 
 def GetUsernameFromToken(token:str):
-    #try:
+    try:
         return json.loads(base64.b64decode(token).decode()).get("username")
-    #except:
-    #    return None
+    except:
+        return None

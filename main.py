@@ -68,6 +68,23 @@ def LoginPage():
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/login.html").read()
 
+@App.route("/view/users/<username>")
+def ViewUserPage(username):
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return flask.render_template_string(open("pages/view_username.html").read(),username=username)
+
+
+@App.route("/view/@me")
+def ViewMyselfPage():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/view_me.html").read()
+
 # Users api
 
 # Sign-up endpoint
@@ -114,7 +131,7 @@ def SignupApi():
 
     token = utils.GeneralUtils.GenerateToken(request.json.get("username"),request.json.get("password"))
     cursor.execute("INSERT INTO users(username,display_name,encrypted_password,timestamp,token) VALUES (?,?,?,?,?)",(
-        request.json.get("username"),
+        request.json.get("username").lower(),
         request.json.get("username"),
         hashed_password,
         str(time.time()),
@@ -148,7 +165,7 @@ def LoginApi():
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
-    if (cursor.execute("SELECT username FROM users WHERE username=?",(request.args.get("username"),)).fetchone() == None):
+    if (cursor.execute("SELECT username FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone() == None):
         utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
         return jsonify({"Error":"No user with such username"}),400
     
@@ -156,12 +173,12 @@ def LoginApi():
     enc_pass.update(request.args.get("password").encode())
     enc_pass = enc_pass.hexdigest()
 
-    row = cursor.execute("SELECT encrypted_password FROM users WHERE username=?", (request.args.get("username"),)).fetchone()
+    row = cursor.execute("SELECT encrypted_password FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
     if not row or row[0] != enc_pass:
         utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
         return jsonify({"Error": "Invalid password"}), 400
     
-    token = cursor.execute("SELECT token FROM users WHERE username=?", (request.args.get("username"),)).fetchone()[0]
+    token = cursor.execute("SELECT token FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()[0]
     
     conn.commit()
     cursor.close()
@@ -194,7 +211,7 @@ def UserViewApi():
         utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
         return jsonify({"Error":"Token is invalid"}),400
     
-    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin FROM users WHERE username=?",(request.args.get("username"),)).fetchone()
+    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone()
     user_obj = {}
 
     if user == None:
@@ -203,11 +220,12 @@ def UserViewApi():
         is_admin = lambda val:False if val == 0 else True
         user_obj = {
             "Message":"User was found!",
-            "username":user[0],
+            "username":user[0].lower(),
             "display_name":user[1],
             "bio":user[2],
             "created_on":user[3],
-            "is_admin":  is_admin(user[4])
+            "is_admin":  is_admin(user[4]),
+            "user_id":user[5],
         }
     
     conn.commit()
@@ -216,7 +234,55 @@ def UserViewApi():
 
     utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.args.get("token")),True,request.path,request.remote_addr)
 
-    return jsonify({"Message":"Success","User":user_obj}),200
+    return jsonify({"User":user_obj}),200
+
+# Check if ip is blocked
+# Check if it has all parameters needed
+# Check if the token is valid
+# Get params from user with set token
+@App.route("/api/users/tokendata",methods=["GET"])
+def TokenViewApi():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
+    
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
+        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
+    
+    if not request.args.get("token"):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request does not have a token"}),401
+    
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
+        # OPTIMIZATION TODO: Make this get the username from token then check token validity
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Token is invalid"}),400
+    
+    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id FROM users WHERE token=?",(request.args.get("token"),)).fetchone()
+    user_obj = {}
+
+    if user == None:
+        user_obj = {"Message":"No user with set token found!"}
+    else:
+        is_admin = lambda val:False if val == 0 else True
+        user_obj = {
+            "Message":"User was found!",
+            "username":user[0].lower(),
+            "display_name":user[1],
+            "bio":user[2],
+            "created_on":user[3],
+            "is_admin":  is_admin(user[4]),
+            "user_id":user[5],
+        }
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.args.get("token")),True,request.path,request.remote_addr)
+
+    return jsonify({"User":user_obj}),200
 
 # Check if ip is blocked
 # Check if request is json
@@ -248,6 +314,57 @@ def UserDeleteApi():
     
     # OPTIMIZATION TODO: Make this get the username from token to delete easier
     cursor.execute("DELETE FROM users WHERE token=?",(request.json.get("token"),))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),True,request.path,request.remote_addr)
+
+    return jsonify({"Message":"Success"}),200
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the token is valid
+# Check constraints
+# Patch to all params needed
+@App.route("/api/users/modify",methods=["PATCH"])
+def UserModifyApi():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
+    
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
+        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
+    
+    if not request.is_json:
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"This request is not identified as JSON"}),400
+    
+    if not request.json.get("token") or not request.json.get("display_name") or not request.json.get("bio"):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Does not have all params needed!"}),400
+    
+    forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
+    display_forbidden_chars = {"#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">"}
+    
+    if not request.json.get("display_name") or len(request.json.get("display_name")) >= 40 or any(char in display_forbidden_chars for char in request.json.get("display_name")):
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Display name dosen't repsect constrains"}),400
+    
+    if not request.json.get("bio") or len(request.json.get("bio")) > 200:
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Bio dosen't repsect constrains"}),400
+    
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.json.get("token"),)).fetchone() == None):
+        # OPTIMIZATION TODO: Make this get the username from token then check token validity
+        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+        return jsonify({"Error":"Token is invalid"}),400
+    
+    # OPTIMIZATION TODO: Make this get the username from token to delete easier
+    cursor.execute("UPDATE users SET display_name=?, bio=? WHERE token=?",(request.json.get("display_name"),request.json.get("bio"),request.json.get("token"),))
     
     conn.commit()
     cursor.close()
