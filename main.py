@@ -20,7 +20,8 @@ conn.execute("""CREATE TABLE IF NOT EXISTS users (
     bio TEXT,
     encrypted_password TEXT NOT NULL,
     admin TINYINT(1) NOT NULL DEFAULT 0,
-    timestamp TEXT NOT NULL,
+    banned TINYINT(1) NOT NULL DEFAULT 0,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     token TEXT NOT NULL
 );""")
 
@@ -39,11 +40,48 @@ conn.execute("""CREATE TABLE IF NOT EXISTS blocked_ip (
     blocked TINYINT(1) NOT NULL DEFAULT 0
 );""")
 
+conn.execute("""CREATE TABLE IF NOT EXISTS threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    identifier VARCHAR(150) NOT NULL,
+    description TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    image_url TEXT DEFAULT '/static/AFLOGO.png'
+);""")
+
+conn.execute("""CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    thread_id INTEGER NOT NULL,
+    title VARCHAR(50) NOT NULL,
+    content TEXT NOT NULL,
+    image_attachment TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);""")
+
+conn.execute("""CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    post_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);""")
 
 conn.commit()
 conn.close()
 
 # App
+
+# TODO add functions for making all
+# TODO add functions for reading all
+# TODO add functions for deleting all
+# TODO add functions for likeing/subscribing to them all
+# TODO add functions for reporting
+# TODO add functions for ban/moderation (admin only)
+# TODO add a feed page (or more)
+# TODO add an algorithm for showing posts you may like
+# TODO add a search page for posts
 
 App = flask.Flask(__name__,static_url_path="/static")
 
@@ -87,14 +125,11 @@ def ViewMyselfPage():
 
 # Users api
 
-# Sign-up endpoint
-
 # Check if ip is blocked
 # Check if request is json
 # Check if it has all parameters needed
 # Check if there is already a user with that username
 # Check if the given username respects all constraints: lenght of 25 , no spaces , no special char like 'forbidden_chars'
-
 @App.route("/api/signup",methods=["POST"])
 def SignupApi():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
@@ -373,5 +408,70 @@ def UserModifyApi():
     utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),True,request.path,request.remote_addr)
 
     return jsonify({"Message":"Success"}),200
+
+# Thread->Post->Comment api
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if identifier name is already used
+# Check if the params are all valid
+@App.route("/api/thread/post", methods=["POST"])
+def MakeThread():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
+
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
+        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
+
+    forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
+
+    if not request.is_json:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "This request is not identified as JSON"}), 400
+
+    data = request.json
+    required_fields = ["name", "description", "token", "identifier"]
+    if not all(field in data and data[field] for field in required_fields):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Missing one or more required fields: name, description, token, identifier"}), 400
+
+    name = data["name"]
+    description = data["description"]
+    identifier = data["identifier"]
+
+    if (
+        len(identifier) >= 25 or
+        any(char in forbidden_chars for char in identifier) or
+        len(name) > 50 or
+        len(description) > 200
+    ):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Request doesn't respect constraints"}), 400
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 401
+
+    if cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (identifier,)).fetchone():
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Identifier already used"}), 400
+
+    user_id = user[0]
+    cursor.execute(
+        "INSERT INTO threads(owner_id, name, identifier, description) VALUES (?, ?, ?, ?)",
+        (user_id, name, identifier, description)
+    )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success"}), 200
 
 App.run(port=80)
