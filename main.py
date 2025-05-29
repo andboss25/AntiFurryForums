@@ -42,7 +42,7 @@ conn.execute("""CREATE TABLE IF NOT EXISTS blocked_ip (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS threads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER NOT NULL,
+    owner_username TEXT,
     name VARCHAR(200) NOT NULL,
     identifier VARCHAR(150) NOT NULL,
     description TEXT,
@@ -52,7 +52,7 @@ conn.execute("""CREATE TABLE IF NOT EXISTS threads (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER NOT NULL,
+    owner_username TEXT,
     thread_id INTEGER NOT NULL,
     title VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
@@ -62,21 +62,31 @@ conn.execute("""CREATE TABLE IF NOT EXISTS posts (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER NOT NULL,
+    owner_username TEXT,
     post_id INTEGER NOT NULL,
     content TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );""")
+
+conn.execute("""
+CREATE TABLE IF NOT EXISTS subscribed_threads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    thread_identifier TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
 
 conn.commit()
 conn.close()
 
 # App
 
-# TODO add functions for making all
-# TODO add functions for reading all
-# TODO add functions for deleting all
-# TODO add functions for likeing/subscribing to them all
+# TODO add functions for making comments and posts
+# TODO add functions for reading comments and posts
+# TODO add functions for deleting comments and posts
+# TODO add functions for likeing/subscribing comments and posts
 # TODO add functions for reporting
 # TODO add functions for ban/moderation (admin only)
 # TODO add a feed page (or more)
@@ -416,6 +426,7 @@ def UserModifyApi():
 # Check if it has all parameters needed
 # Check if identifier name is already used
 # Check if the params are all valid
+# Insert into db
 @App.route("/api/thread/post", methods=["POST"])
 def MakeThread():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
@@ -460,10 +471,10 @@ def MakeThread():
         utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
         return jsonify({"Error": "Identifier already used"}), 400
 
-    user_id = user[0]
+    username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
     cursor.execute(
-        "INSERT INTO threads(owner_id, name, identifier, description) VALUES (?, ?, ?, ?)",
-        (user_id, name, identifier, description)
+        "INSERT INTO threads(owner_username, name, identifier, description) VALUES (?, ?, ?, ?)",
+        (username, name, identifier, description)
     )
 
     conn.commit()
@@ -473,5 +484,249 @@ def MakeThread():
     utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success"}), 200
+
+# View threads with option to search or filter by identifier
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token, search
+# Validate token and get username
+# Search threads or filter by thread_identifier or get all threads
+# Get user's subscribed threads
+# Add 'subscribed' flag to each thread in the response
+@App.route("/api/thread/view", methods=["GET"])
+def ViewThreads():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
+
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
+        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
+
+    data = request.args
+    required_fields = ["token", "search"]
+    if not all(field in data and data[field] for field in required_fields):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Missing one or more required fields: token , search"}), 400
+
+    token = data["token"]
+    search = data["search"].lower() == "true"
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    if search:
+        search_for = data.get("search_for", "")
+        query = "SELECT * FROM threads WHERE description LIKE ? OR name LIKE ? OR identifier LIKE ?"
+        like_term = f"%{search_for}%"
+        threads = cursor.execute(query, (like_term, like_term, like_term)).fetchall()
+    elif "thread_identifier" in data:
+        thread_identifier = data["thread_identifier"]
+        threads = cursor.execute("SELECT * FROM threads WHERE identifier=?", (thread_identifier,)).fetchall()
+    else:
+        threads = cursor.execute("SELECT * FROM threads").fetchall()
+
+    subscribed = cursor.execute(
+        "SELECT thread_identifier FROM subscribed_threads WHERE username=?", (username,)
+    ).fetchall()
+    subscribed_set = set(row[0] for row in subscribed)
+
+    thread_list = []
+    for thread in threads:
+        thread_dict = {
+            "id": thread[0],
+            "owner_username": thread[1],
+            "name": thread[2],
+            "identifier": thread[3],
+            "description": thread[4],
+            "subscribed": thread[3] in subscribed_set
+        }
+        thread_list.append(thread_dict)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"Message": "Success", "Threads": thread_list}), 200
+
+# Check if ip is blocked
+# Check if request is JSON
+# Check if it has all parameters needed
+# Validate token and ownership
+# Delete thread if it exists and belongs to user
+@App.route("/api/thread/delete", methods=["DELETE"])
+def DeleteThread():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
+
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
+        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
+
+    if not request.is_json:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "This request is not identified as JSON"}), 400
+
+    data = request.json
+    required_fields = ["token", "identifier"]
+    if not all(field in data and data[field] for field in required_fields):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Missing one or more required fields: token, identifier"}), 400
+
+    token = data["token"]
+    identifier = data["identifier"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    # Get username from token and ensure it's valid
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Invalid token"}), 401
+
+    # Check if thread exists and is owned by the user
+    thread = cursor.execute(
+        "SELECT * FROM threads WHERE identifier=? AND owner_username=?", (identifier, username)
+    ).fetchone()
+
+    if not thread:
+        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Thread not found or not owned by user"}), 404
+
+    # Delete the thread
+    cursor.execute("DELETE FROM threads WHERE identifier=? AND owner_username=?", (identifier, username))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Thread successfully deleted"}), 200
+
+# Check if IP is blocked
+# Check if request is JSON
+# Check if all parameters exist
+# Validate token and user
+# Subscribe or unsubscribe based on action
+@App.route("/api/thread/subscribe", methods=["POST"])
+def SubscribeThread():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
+
+    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
+        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
+
+    if not request.is_json:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "This request is not identified as JSON"}), 400
+
+    data = request.json
+    required_fields = ["token", "identifier", "action"]
+    if not all(field in data and data[field] for field in required_fields):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Missing one or more required fields: token, identifier, action"}), 400
+
+    token = data["token"]
+    identifier = data["identifier"]
+    action = data["action"].lower()  # expected: "subscribe" or "unsubscribe"
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Invalid token"}), 401
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    # Check if thread exists
+    thread_exists = cursor.execute("SELECT 1 FROM threads WHERE identifier=?", (identifier,)).fetchone()
+    if not thread_exists:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Thread does not exist"}), 404
+
+    if action == "subscribe":
+        # Check for existing subscription
+        existing = cursor.execute(
+            "SELECT 1 FROM subscribed_threads WHERE username=? AND thread_identifier=?",
+            (username.lower(), identifier)
+        ).fetchone()
+
+        if existing:
+            cursor.close()
+            conn.close()
+            return jsonify({"Error": "Already subscribed"}), 400
+
+        cursor.execute(
+            "INSERT INTO subscribed_threads(username, thread_identifier) VALUES (?, ?)",
+            (username, identifier)
+        )
+        conn.commit()
+
+    elif action == "unsubscribe":
+        cursor.execute(
+            "DELETE FROM subscribed_threads WHERE username=? AND thread_identifier=?",
+            (username, identifier)
+        )
+        conn.commit()
+
+    else:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Action must be either 'subscribe' or 'unsubscribe'"}), 400
+
+    cursor.close()
+    conn.close()
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": f"Successfully {action}d to thread"}), 200
+
+# List all threads that the user is subscribed to
+# Check if IP is blocked
+# Check if token parameter is provided
+# Validate token and get username
+# Query subscribed threads for the user
+# Return the list of subscribed thread identifiers
+@App.route("/api/thread/subscriptions", methods=["GET"])
+def ListUserSubscriptions():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
+
+    data = request.args
+    if "token" not in data or not data["token"]:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Missing required field: token"}), 400
+
+    token = data["token"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    subscriptions = cursor.execute(
+        "SELECT username,thread_identifier FROM subscribed_threads WHERE username=?", (username.lower(),)
+    ).fetchall()
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"Message": "Success", "SubscribedThreads": subscriptions}), 200
 
 App.run(port=80)
