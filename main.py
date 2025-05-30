@@ -45,7 +45,7 @@ conn.execute("""CREATE TABLE IF NOT EXISTS blocked_ip (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS threads (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT,
+    owner_username TEXT NOT NULL,
     name VARCHAR(200) NOT NULL,
     identifier VARCHAR(150) NOT NULL,
     description TEXT,
@@ -55,8 +55,8 @@ conn.execute("""CREATE TABLE IF NOT EXISTS threads (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS posts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT,
-    thread_id INTEGER NOT NULL,
+    owner_username TEXT NOT NULL,
+    thread_identifier TEXT NOT NULL,
     title VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
     image_attachment TEXT,
@@ -65,7 +65,7 @@ conn.execute("""CREATE TABLE IF NOT EXISTS posts (
 
 conn.execute("""CREATE TABLE IF NOT EXISTS comments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT,
+    owner_username TEXT NOT NULL,
     post_id INTEGER NOT NULL,
     content TEXT NOT NULL,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -86,8 +86,8 @@ conn.close()
 
 # App
 
-# TODO add functions for making comments and posts
-# TODO add functions for reading comments and posts
+# TODO add functions for making comments
+# TODO add functions for reading comments
 # TODO add functions for deleting comments and posts
 # TODO add functions for likeing/subscribing comments and posts
 # TODO add functions for reporting
@@ -367,7 +367,7 @@ def UserModifyApi():
 
     return jsonify({"Message":"Success"}),200
 
-# Thread->Post->Comment api
+# Thread api
 
 # Check if ip is blocked
 # Check if request is json
@@ -377,7 +377,7 @@ def UserModifyApi():
 # Insert into db
 @App.route("/api/thread/post", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["name","description","identifier"])
+@utils.Wrappers.require_json_with_fields(["name","description","identifier","token"])
 def MakeThread():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
 
@@ -431,7 +431,7 @@ def MakeThread():
 # Add 'subscribed' flag to each thread in the response
 @App.route("/api/thread/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["token", "search"])
+@utils.Wrappers.require_query_params(["token", "search"])
 def ViewThreads():
     data = request.args
     token = data["token"]
@@ -626,5 +626,119 @@ def ListUserSubscriptions():
     utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "SubscribedThreads": subscriptions}), 200
+
+# Post api
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the params are all valid
+# Insert into db
+@App.route("/api/post/post", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["title","content","token","thread_identifier"])
+def MakePost():
+    forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
+
+    data = request.json
+
+    title = data["title"]
+    content = data["content"]
+    thread_identifier = data["thread_identifier"]
+
+    if (
+        len(content) >= 300 or
+        len(title) > 50
+    ):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Request doesn't respect constraints"}), 400
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 401
+    
+    if not cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (thread_identifier,)).fetchone():
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "No such thread with this identifier!"}), 400
+
+    username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
+    cursor.execute(
+        "INSERT INTO posts(owner_username,thread_identifier,content,title) VALUES (?, ?, ?, ?)",
+        (username,thread_identifier,content,title)
+    )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success"}), 200
+
+# View threads with option to search or filter by identifier
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token, search
+# Validate token and get username
+# Search threads or filter by thread_identifier or get all threads
+# Get user's subscribed threads
+# Add 'subscribed' flag to each thread in the response
+@App.route("/api/post/view", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token", "search"])
+def ViewPosts():
+    data = request.args
+    token = data["token"]
+    search = data["search"].lower() == "true"
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    if search:
+        search_for = data.get("search_for", "")
+        query = "SELECT * FROM posts WHERE content LIKE ? OR title LIKE ?"
+        like_term = f"%{search_for}%"
+        threads = cursor.execute(query, (like_term, like_term)).fetchall()
+    elif "thread_identifier" in data:
+        thread_identifier = data["thread_identifier"]
+        threads = cursor.execute("SELECT * FROM posts WHERE thread_identifier=?", (thread_identifier,)).fetchall()
+    elif "id" in data:
+        threads = cursor.execute("SELECT * FROM posts WHERE id=?", (data["id"],)).fetchall()
+    else:
+        threads = cursor.execute("SELECT * FROM posts").fetchall()
+
+    thread_list = []
+    for thread in threads:
+        thread_dict = {
+            "id": thread[0],
+            "owner_username": thread[1],
+            "thread_identifier": thread[2],
+            "title": thread[3],
+            "content": thread[4],
+            "image_attachment": thread[5],
+            "timestamp": thread[6],
+        }
+        thread_list.append(thread_dict)
+        
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success", "Posts": thread_list}), 200
+
 
 App.run(port=80)
