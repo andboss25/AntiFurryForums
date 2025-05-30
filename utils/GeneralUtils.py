@@ -91,3 +91,5 @@ def GetUsernameFromToken(token:str):
         return json.loads(base64.b64decode(token).decode()).get("username")
     except:
         return None
+
+# Guard api

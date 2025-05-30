@@ -2,12 +2,15 @@
 # *idk why i made this open source*
 
 import flask
+from flask import request,jsonify
+
 import sqlite3
 import hashlib
 import time
+
+import utils.Wrappers
 import utils.GeneralUtils
 
-from flask import request,jsonify
 
 # Innit Database
 
@@ -141,22 +144,14 @@ def ViewMyselfPage():
 # Check if there is already a user with that username
 # Check if the given username respects all constraints: lenght of 25 , no spaces , no special char like 'forbidden_chars'
 @App.route("/api/signup",methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["username","password"])
 def SignupApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
 
     if not request.is_json:
         utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
         return jsonify({"Error":"This request is not identified as JSON"}),400
-    
-    if not request.json.get("username") or not request.json.get("password"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request does not have either a 'username' or 'password'"}),400
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
@@ -197,17 +192,9 @@ def SignupApi():
 # Check if the password is correct
 # Return token
 @App.route("/api/login",methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["username","password"])
 def LoginApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
-    if not request.args.get("username") or not request.args.get("password"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request does not have either a 'username' or 'password'"}),400
-    
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT username FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone() == None):
@@ -238,17 +225,9 @@ def LoginApi():
 # Check if the token is valid
 # Get user parameters from given user and if it returns None then display No user found
 @App.route("/api/users/view",methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["username","token"])
 def UserViewApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
-    if not request.args.get("token") or not request.args.get("username"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request does not have either a 'token' or 'username'"}),400
-    
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
@@ -286,16 +265,9 @@ def UserViewApi():
 # Check if the token is valid
 # Get params from user with set token
 @App.route("/api/users/tokendata",methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token"])
 def TokenViewApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
-    if not request.args.get("token"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request does not have a token"}),401
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
@@ -335,21 +307,9 @@ def TokenViewApi():
 # Check if the token is valid
 # Delete user with given token
 @App.route("/api/users/delete",methods=["DELETE"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token"])
 def UserDeleteApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
-    if not request.is_json:
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request is not identified as JSON"}),400
-    
-    if not request.json.get("token"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request does not have a token"}),401
-    
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT token FROM users WHERE token=?",(request.json.get("token"),)).fetchone() == None):
@@ -375,21 +335,9 @@ def UserDeleteApi():
 # Check constraints
 # Patch to all params needed
 @App.route("/api/users/modify",methods=["PATCH"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token","display_name","bio"])
 def UserModifyApi():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error":"This ip address has been permanently blocked off this site!"}),400
-    
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr,addr_list):
-        return jsonify({"Error":"Temporary cooldown becuse of too many requests!"}),400
-    
-    if not request.is_json:
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"This request is not identified as JSON"}),400
-    
-    if not request.json.get("token") or not request.json.get("display_name") or not request.json.get("bio"):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"Does not have all params needed!"}),400
-    
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
     display_forbidden_chars = {"#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">"}
     
@@ -428,24 +376,12 @@ def UserModifyApi():
 # Check if the params are all valid
 # Insert into db
 @App.route("/api/thread/post", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["name","description","identifier"])
 def MakeThread():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
-
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
-        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
-
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
 
-    if not request.is_json:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "This request is not identified as JSON"}), 400
-
     data = request.json
-    required_fields = ["name", "description", "token", "identifier"]
-    if not all(field in data and data[field] for field in required_fields):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "Missing one or more required fields: name, description, token, identifier"}), 400
 
     name = data["name"]
     description = data["description"]
@@ -494,19 +430,10 @@ def MakeThread():
 # Get user's subscribed threads
 # Add 'subscribed' flag to each thread in the response
 @App.route("/api/thread/view", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "search"])
 def ViewThreads():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
-
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
-        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
-
     data = request.args
-    required_fields = ["token", "search"]
-    if not all(field in data and data[field] for field in required_fields):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "Missing one or more required fields: token , search"}), 400
-
     token = data["token"]
     search = data["search"].lower() == "true"
 
@@ -548,10 +475,13 @@ def ViewThreads():
             "subscribed": thread[3] in subscribed_set
         }
         thread_list.append(thread_dict)
+        
 
     conn.commit()
     cursor.close()
     conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Threads": thread_list}), 200
 
@@ -561,29 +491,15 @@ def ViewThreads():
 # Validate token and ownership
 # Delete thread if it exists and belongs to user
 @App.route("/api/thread/delete", methods=["DELETE"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields([["token", "identifier"]])
 def DeleteThread():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
-
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
-        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
-
-    if not request.is_json:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "This request is not identified as JSON"}), 400
-
     data = request.json
-    required_fields = ["token", "identifier"]
-    if not all(field in data and data[field] for field in required_fields):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "Missing one or more required fields: token, identifier"}), 400
-
     token = data["token"]
     identifier = data["identifier"]
 
     cursor, conn = utils.GeneralUtils.InnitDB()
 
-    # Get username from token and ensure it's valid
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
         utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
@@ -591,7 +507,6 @@ def DeleteThread():
         conn.close()
         return jsonify({"Error": "Invalid token"}), 401
 
-    # Check if thread exists and is owned by the user
     thread = cursor.execute(
         "SELECT * FROM threads WHERE identifier=? AND owner_username=?", (identifier, username)
     ).fetchone()
@@ -602,7 +517,6 @@ def DeleteThread():
         conn.close()
         return jsonify({"Error": "Thread not found or not owned by user"}), 404
 
-    # Delete the thread
     cursor.execute("DELETE FROM threads WHERE identifier=? AND owner_username=?", (identifier, username))
 
     conn.commit()
@@ -619,26 +533,13 @@ def DeleteThread():
 # Validate token and user
 # Subscribe or unsubscribe based on action
 @App.route("/api/thread/subscribe", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "identifier", "action"])
 def SubscribeThread():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
-
-    if utils.GeneralUtils.CooldownCheck(request.remote_addr, addr_list):
-        return jsonify({"Error": "Temporary cooldown because of too many requests!"}), 400
-
-    if not request.is_json:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "This request is not identified as JSON"}), 400
-
     data = request.json
-    required_fields = ["token", "identifier", "action"]
-    if not all(field in data and data[field] for field in required_fields):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "Missing one or more required fields: token, identifier, action"}), 400
-
     token = data["token"]
     identifier = data["identifier"]
-    action = data["action"].lower()  # expected: "subscribe" or "unsubscribe"
+    action = data["action"].lower()
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
@@ -655,7 +556,6 @@ def SubscribeThread():
         return jsonify({"Error": "Thread does not exist"}), 404
 
     if action == "subscribe":
-        # Check for existing subscription
         existing = cursor.execute(
             "SELECT 1 FROM subscribed_threads WHERE username=? AND thread_identifier=?",
             (username.lower(), identifier)
@@ -690,6 +590,7 @@ def SubscribeThread():
 
     return jsonify({"Message": f"Successfully {action}d to thread"}), 200
 
+
 # List all threads that the user is subscribed to
 # Check if IP is blocked
 # Check if token parameter is provided
@@ -697,15 +598,10 @@ def SubscribeThread():
 # Query subscribed threads for the user
 # Return the list of subscribed thread identifiers
 @App.route("/api/thread/subscriptions", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token"])
 def ListUserSubscriptions():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return jsonify({"Error": "This IP address has been permanently blocked off this site!"}), 400
-
     data = request.args
-    if "token" not in data or not data["token"]:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        return jsonify({"Error": "Missing required field: token"}), 400
-
     token = data["token"]
 
     cursor, conn = utils.GeneralUtils.InnitDB()
@@ -726,6 +622,8 @@ def ListUserSubscriptions():
     conn.commit()
     cursor.close()
     conn.close()
+    
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "SubscribedThreads": subscriptions}), 200
 
