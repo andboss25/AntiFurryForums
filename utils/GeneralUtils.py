@@ -43,6 +43,7 @@ def IsIpBlocked(ip):
 
 # Token generator function
 def GenerateToken(username, encrypted_password):
+    username = username.lower()
     sha = hashlib.sha256()
     sha.update(encrypted_password.encode())
     part1 = sha.hexdigest()

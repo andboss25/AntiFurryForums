@@ -80,6 +80,14 @@ CREATE TABLE IF NOT EXISTS subscribed_threads (
 );
 """)
 
+conn.execute("""
+CREATE TABLE IF NOT EXISTS liked_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
 
 conn.commit()
 conn.close()
@@ -88,8 +96,8 @@ conn.close()
 
 # TODO add functions for making comments
 # TODO add functions for reading comments
-# TODO add functions for deleting comments and posts
-# TODO add functions for likeing/subscribing comments and posts
+# TODO add functions for deleting comments
+# TODO add functions for likeing/subscribing comments
 # TODO add functions for reporting
 # TODO add functions for ban/moderation (admin only)
 # TODO add a feed page (or more)
@@ -678,14 +686,13 @@ def MakePost():
 
     return jsonify({"Message": "Success"}), 200
 
-# View threads with option to search or filter by identifier
 # Check if IP is blocked
 # Check for cooldown on IP
 # Validate required parameters: token, search
 # Validate token and get username
-# Search threads or filter by thread_identifier or get all threads
-# Get user's subscribed threads
-# Add 'subscribed' flag to each thread in the response
+# Search posts or filter by post_identifier or get all posts
+# Get user's subscribed posts
+# Add 'liked' flag to each post in response
 @App.route("/api/post/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
 @utils.Wrappers.require_query_params(["token", "search"])
@@ -709,36 +716,152 @@ def ViewPosts():
         search_for = data.get("search_for", "")
         query = "SELECT * FROM posts WHERE content LIKE ? OR title LIKE ?"
         like_term = f"%{search_for}%"
-        threads = cursor.execute(query, (like_term, like_term)).fetchall()
-    elif "thread_identifier" in data:
-        thread_identifier = data["thread_identifier"]
-        threads = cursor.execute("SELECT * FROM posts WHERE thread_identifier=?", (thread_identifier,)).fetchall()
+        posts = cursor.execute(query, (like_term, like_term)).fetchall()
+    elif "post_identifier" in data:
+        post_identifier = data["post_identifier"]
+        posts = cursor.execute("SELECT * FROM posts WHERE thread_identifier=?", (post_identifier,)).fetchall()
     elif "id" in data:
-        threads = cursor.execute("SELECT * FROM posts WHERE id=?", (data["id"],)).fetchall()
+        posts = cursor.execute("SELECT * FROM posts WHERE id=?", (data["id"],)).fetchall()
     else:
-        threads = cursor.execute("SELECT * FROM posts").fetchall()
+        posts = cursor.execute("SELECT * FROM posts").fetchall()
+    
+    liked = cursor.execute(
+        "SELECT id FROM liked_posts WHERE username=?",(username,),
+    ).fetchall()
 
-    thread_list = []
-    for thread in threads:
-        thread_dict = {
-            "id": thread[0],
-            "owner_username": thread[1],
-            "thread_identifier": thread[2],
-            "title": thread[3],
-            "content": thread[4],
-            "image_attachment": thread[5],
-            "timestamp": thread[6],
-        }
-        thread_list.append(thread_dict)
+    liked = [row[0] for row in cursor.execute(
+        "SELECT id FROM liked_posts WHERE username = ?", (username,)
+    ).fetchall()]
+
+    post_list = []
+    for post in posts:
+        is_liked = post[0] in liked
         
-
+        post_dict = {
+            "id": post[0],
+            "owner_username": post[1],
+            "post_identifier": post[2],
+            "title": post[3],
+            "content": post[4],
+            "image_attachment": post[5],
+            "liked": is_liked,
+            "timestamp": post[6],
+        }
+        post_list.append(post_dict)
     conn.commit()
     cursor.close()
     conn.close()
 
     utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
-    return jsonify({"Message": "Success", "Posts": thread_list}), 200
+    return jsonify({"Message": "Success", "Posts": post_list}), 200
 
+# Check if ip is blocked
+# Check if request is JSON
+# Check if it has all parameters needed
+# Validate token and ownership
+# Delete post if it exists and belongs to user
+@App.route("/api/posts/delete", methods=["DELETE"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "id"])
+def DeletePost():
+    data = request.json
+    token = data["token"]
+    id = data["id"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Invalid token"}), 401
+
+    post = cursor.execute(
+        "SELECT * FROM posts WHERE id=? AND owner_username=?", (id, username)
+    ).fetchone()
+
+    if not post:
+        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Post not found or not owned by user"}), 404
+
+    cursor.execute("DELETE FROM posts WHERE id=? AND owner_username=?", (id, username))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Post successfully deleted"}), 200
+
+
+# Check if IP is blocked
+# Check if request is JSON
+# Check if all parameters exist
+# Validate token and user
+# Like or unlike based on action
+@App.route("/api/posts/like", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "id", "action"])
+def LikePost():
+    data = request.json
+    token = data["token"]
+    id = data["id"]
+    action = data["action"].lower()
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    thread_exists = cursor.execute("SELECT 1 FROM posts WHERE id=?", (id,)).fetchone()
+    if not thread_exists:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Post does not exist"}), 404
+
+    if action == "like":
+        existing = cursor.execute(
+            "SELECT 1 FROM liked_posts WHERE username=? AND post_id=?",
+            (username.lower(), id)
+        ).fetchone()
+
+        if existing:
+            cursor.close()
+            conn.close()
+            return jsonify({"Error": "Already liked"}), 400
+
+        cursor.execute(
+            "INSERT INTO liked_posts(username, post_id) VALUES (?, ?)",
+            (username, id)
+        )
+        conn.commit()
+
+    elif action == "unlike":
+        cursor.execute(
+            "DELETE FROM liked_posts WHERE username=? AND id=?",
+            (username, id)
+        )
+        conn.commit()
+
+    else:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Action must be either 'like' or 'unlike'"}), 400
+
+    cursor.close()
+    conn.close()
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": f"Successfully {action}d the post"}), 200
 
 App.run(port=80)
