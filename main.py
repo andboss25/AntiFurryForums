@@ -89,15 +89,21 @@ CREATE TABLE IF NOT EXISTS liked_posts (
 );
 """)
 
+conn.execute("""
+CREATE TABLE IF NOT EXISTS liked_comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    comment_id TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
 conn.commit()
 conn.close()
 
 # App
 
-# TODO add functions for making comments
-# TODO add functions for reading comments
-# TODO add functions for deleting comments
-# TODO add functions for likeing/subscribing comments
+# TODO make frontend for all ts
 # TODO add functions for reporting
 # TODO add functions for ban/moderation (admin only)
 # TODO add a feed page (or more)
@@ -725,10 +731,6 @@ def ViewPosts():
     else:
         posts = cursor.execute("SELECT * FROM posts").fetchall()
     
-    liked = cursor.execute(
-        "SELECT id FROM liked_posts WHERE username=?",(username,),
-    ).fetchall()
-
     liked = [row[0] for row in cursor.execute(
         "SELECT id FROM liked_posts WHERE username = ?", (username,)
     ).fetchall()]
@@ -863,5 +865,212 @@ def LikePost():
     utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": f"Successfully {action}d the post"}), 200
+
+# Comments api
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the params are all valid
+# Insert into db
+@App.route("/api/comment/post", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["content","token","post_id"])
+def MakeComment():
+    data = request.json
+
+    content = data["content"]
+    post_id = data["post_id"]
+
+    if (
+        len(content) >= 100
+    ):
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Request doesn't respect constraints"}), 400
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 401
+    
+    if not cursor.execute("SELECT id FROM posts WHERE id=?", (post_id,)).fetchone():
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "No such post with this id!"}), 400
+
+    username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
+    cursor.execute(
+        "INSERT INTO comments(owner_username,post_id,content) VALUES (?, ?, ?)",
+        (username,post_id,content)
+    )
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success"}), 200
+
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token, post_id
+# Validate token and get username
+# Get user's liked comments
+# Add 'liked' flag to each comment in response
+@App.route("/api/comments/view", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token","post_id"])
+def ViewComments():
+    data = request.args
+    token = data["token"]
+    post_id = data["post_id"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    comments = cursor.execute("SELECT * FROM comments WHERE post_id=?",post_id).fetchall()
+
+    liked = [row[0] for row in cursor.execute(
+        "SELECT id FROM liked_comments WHERE username = ?", (username,)
+    ).fetchall()]
+
+    comments_list = []
+    for comment in comments:
+        is_liked = comment[0] in liked
+        
+        post_dict = {
+            "id": comment[0],
+            "owner_username": comment[1],
+            "post_id":comment[2],
+            "content":comment[3],
+            "timestamp":comment[4],
+            "liked":is_liked
+        }
+        comments_list.append(post_dict)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success", "Comments": comments_list}), 200
+
+# Check if ip is blocked
+# Check if request is JSON
+# Check if it has all parameters needed
+# Validate token and ownership
+# Delete post if it exists and belongs to user
+@App.route("/api/comments/delete", methods=["DELETE"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "id"])
+def DeleteComment():
+    data = request.json
+    token = data["token"]
+    id = data["id"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Invalid token"}), 401
+
+    post = cursor.execute(
+        "SELECT * FROM comments WHERE id=? AND owner_username=?", (id, username)
+    ).fetchone()
+
+    if not post:
+        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Comment not found or not owned by user"}), 404
+
+    cursor.execute("DELETE FROM comments WHERE id=? AND owner_username=?", (id, username))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Comment successfully deleted"}), 200
+
+
+# Check if IP is blocked
+# Check if request is JSON
+# Check if all parameters exist
+# Validate token and user
+# Like or unlike based on action
+@App.route("/api/comments/like", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token", "id", "action"])
+def LikeComment():
+    data = request.json
+    token = data["token"]
+    id = data["id"]
+    action = data["action"].lower()
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    thread_exists = cursor.execute("SELECT 1 FROM comments WHERE id=?", (id,)).fetchone()
+    if not thread_exists:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Comment does not exist"}), 404
+
+    if action == "like":
+        existing = cursor.execute(
+            "SELECT 1 FROM liked_comments WHERE username=? AND comment_id=?",
+            (username.lower(), id)
+        ).fetchone()
+
+        if existing:
+            cursor.close()
+            conn.close()
+            return jsonify({"Error": "Already liked"}), 400
+
+        cursor.execute(
+            "INSERT INTO liked_comments(username, comment_id) VALUES (?, ?)",
+            (username, id)
+        )
+        conn.commit()
+
+    elif action == "unlike":
+        cursor.execute(
+            "DELETE FROM liked_comments WHERE username=? AND comment_id=?",
+            (username, id)
+        )
+        conn.commit()
+
+    else:
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Action must be either 'like' or 'unlike'"}), 400
+
+    cursor.close()
+    conn.close()
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": f"Successfully {action}d the comment"}), 200
 
 App.run(port=80)
