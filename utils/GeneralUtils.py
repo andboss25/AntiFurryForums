@@ -60,7 +60,7 @@ def GenerateToken(username, encrypted_password):
     return base64.b64encode(token_obj.encode()).decode()
 
 # Check ip temp-block status and if it overflows a count of requests over 10 secs it will temp block
-def CooldownCheck(ip, ips_list , time_frame=10 , request_max_count=20):
+def CooldownCheck(ip, ips_list , time_frame=10 , request_max_count=40):
     now = time.time()
     cooldown = 15
 

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<!--TODO ADD LIKES AND COMMENTS AND SHIT INTERFACES-->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>View {{thread}}</title>
+  <style>
+    #message {
+      display: none;
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1 id="message"></h1>
+
+  <div id="basic_info">
+    <img src="/static/antifurr_hd.jpeg" alt="antifurry flag image" id="thumb">
+    <h2 id="name"></h2>
+    <h3 id="identifier"></h3>
+    <h3 id="owner"></h3>
+    <p id="sub_count"></p>
+  </div>
+
+  <div id="basic_info_2">
+    <p id="description"></p>
+    <button id="sub_to_thread">Subscribe to thread</button>
+  </div>
+
+  <div id="posts_section">
+    <h2>Posts</h2>
+    <div id="posts_container"></div>
+  </div>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      display: flex;
+      font-family: Arial, Helvetica, sans-serif;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #description {
+      font-style: italic;
+    }
+
+    #thumb {
+      background-size: cover;
+      align-items: center;
+      width: 30%;
+    }
+
+    input, select, button {
+      width: 300px;
+      margin-top: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    #sub_to_thread {
+      font-size: large;
+      background-color: #6e6e6e;
+      color: #cccccc;
+    }
+
+    #sub_to_thread:hover {
+      background-color: #838383;
+    }
+
+    #sub_to_thread:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    h2, h3, p {
+      margin: 0;
+    }
+
+    #identifier, #owner {
+      color: #6e6e6e;
+      font-style: italic;
+    }
+
+    #owner_link {
+      color: rgb(130, 130, 130);
+      font-style: italic;
+      text-decoration: none;
+    }
+
+    #basic_info, #basic_info_2 {
+      text-align: center;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    #basic_info_2 {
+      width: 90%;
+    }
+
+    #posts_section {
+      width: 95%;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    .post_card {
+      background-color: #1a1a1a;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .post_title {
+      font-weight: bold;
+      font-size: 35px;
+    }
+
+    .post_content {
+      margin-top: 5px;
+      font-size: 30px;
+    }
+
+    .post_meta {
+      font-size: 20px;
+      color: #4d4d4d;
+    }
+  </style>
+
+  <script>
+    const threadIdentifier = "{{thread}}";
+
+    window.onload = function () {
+      Render(threadIdentifier);
+    };
+
+    async function Subscribe(id) {
+      const action = document.getElementById("sub_to_thread").innerText.includes("Unsubscribe")
+        ? "unsubscribe"
+        : "subscribe";
+
+      try {
+        const response = await fetch('/api/thread/subscribe', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: localStorage.getItem("token"),
+            identifier: id,
+            action: action
+          })
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+          await Render(id);
+        } else {
+          alert(result.Error || "Subscription action failed.");
+        }
+      } catch (error) {
+        console.error("Subscription error:", error);
+        alert("An error occurred while trying to subscribe.");
+      }
+    }
+
+    async function Render(identifier) {
+      if (!localStorage.getItem("token")) {
+        window.location.href = "/login";
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/thread/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          thread_identifier: identifier,
+          search: false
+        }), { method: 'GET' });
+
+        const result = await response.json();
+
+        if (result.Threads && result.Threads.length > 0) {
+          const thread = result.Threads[0];
+          document.getElementById("identifier").innerText = "/" + thread.identifier;
+          document.getElementById("owner").innerHTML = `owned by <a id="owner_link" href="/view/users/${thread.owner_username}">@${thread.owner_username}</a>`;
+          document.getElementById("name").innerText = thread.name;
+          document.getElementById("sub_count").innerText = "subscriber count: " + thread.subscribed_count;
+          document.getElementById("description").innerText = '"' + (thread.description?.trim() || "No description set for this thread.") + '"';
+
+          const subBtn = document.getElementById("sub_to_thread");
+          subBtn.innerText = thread.subscribed ? "Unsubscribe from thread" : "Subscribe to thread";
+          subBtn.onclick = () => Subscribe(thread.identifier);
+
+          LoadPosts(thread.identifier);
+        } else {
+          document.getElementById("basic_info").style.display = "none";
+          document.getElementById("basic_info_2").style.display = "none";
+          document.getElementById("message").innerText = "Thread not found!";
+          document.getElementById("message").style.display = "block";
+        }
+      } catch (err) {
+        console.error("Fetch error:", err);
+        document.getElementById("basic_info").style.display = "none";
+        document.getElementById("basic_info_2").style.display = "none";
+        document.getElementById("message").innerText = "An unexpected error occurred.";
+        document.getElementById("message").style.display = "block";
+      }
+    }
+
+    async function LoadPosts(threadIdentifier) {
+      const container = document.getElementById("posts_container");
+      container.innerHTML = "";
+
+      try {
+        const response = await fetch('/api/post/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          post_identifier: threadIdentifier,
+          search: false
+        }));
+
+        const result = await response.json();
+
+        if (result.Posts && result.Posts.length > 0) {
+          result.Posts.forEach(post => {
+            const div = document.createElement("div");
+            div.className = "post_card";
+
+            div.innerHTML = `
+              <div class="post_title">${post.title}</div>
+              <div class="post_meta">by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a> ${new Date(post.timestamp).toLocaleString()}</div>
+              <div class="post_content">${post.content}</div>
+            `;
+
+            container.appendChild(div);
+          });
+        } else {
+          container.innerHTML = "<p>No posts in this thread yet.</p>";
+        }
+      } catch (err) {
+        console.error("Error loading posts:", err);
+        container.innerHTML = "<p>Failed to load posts.</p>";
+      }
+    }
+  </script>
+</body>
+</html>

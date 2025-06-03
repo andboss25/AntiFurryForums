@@ -141,7 +141,6 @@ def ViewUserPage(username):
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/view_username.html").read(),username=username)
 
-
 @App.route("/view/@me")
 def ViewMyselfPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
@@ -149,6 +148,14 @@ def ViewMyselfPage():
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/view_me.html").read()
+
+@App.route("/view/threads/<thread>")
+def ViewThreadPage(thread):
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return flask.render_template_string(open("pages/view_thread.html").read(),thread=thread)
 
 # Users api
 
@@ -480,13 +487,15 @@ def ViewThreads():
 
     thread_list = []
     for thread in threads:
+        thread_subs = cursor.execute("SELECT * FROM subscribed_threads WHERE thread_identifier=?",(thread[3],))
         thread_dict = {
             "id": thread[0],
             "owner_username": thread[1],
             "name": thread[2],
             "identifier": thread[3],
             "description": thread[4],
-            "subscribed": thread[3] in subscribed_set
+            "subscribed": thread[3] in subscribed_set,
+            "subscribed_count": len(thread_subs.fetchall())
         }
         thread_list.append(thread_dict)
         
