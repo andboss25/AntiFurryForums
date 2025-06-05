@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<!--TODO ADD LIKES AND COMMENTS AND SHIT INTERFACES-->
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -14,6 +13,8 @@
 </head>
 <body>
   <h1 id="message"></h1>
+  <a id="mkthread" href="/threads/create">Make a thread.</a>
+  
 
   <div id="basic_info">
     <img src="/static/antifurr_hd.jpeg" alt="antifurry flag image" id="thumb">
@@ -26,6 +27,7 @@
   <div id="basic_info_2">
     <p id="description"></p>
     <button id="sub_to_thread">Subscribe to thread</button>
+    <button id="post_to_thread">Create a post</button>
   </div>
 
   <div id="posts_section">
@@ -34,112 +36,33 @@
   </div>
 
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background-color: black;
-      color: white;
-      display: flex;
-      font-family: Arial, Helvetica, sans-serif;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    #description {
-      font-style: italic;
-    }
-
-    #thumb {
-      background-size: cover;
-      align-items: center;
-      width: 30%;
-    }
-
-    input, select, button {
-      width: 300px;
-      margin-top: 10px;
-      padding: 10px;
-      border: none;
-      border-radius: 4px;
-    }
-
-    #sub_to_thread {
-      font-size: large;
-      background-color: #6e6e6e;
-      color: #cccccc;
-    }
-
-    #sub_to_thread:hover {
-      background-color: #838383;
-    }
-
-    #sub_to_thread:active {
-      background-color: #cccccc;
-      color: #838383;
-    }
-
-    h2, h3, p {
-      margin: 0;
-    }
-
-    #identifier, #owner {
-      color: #6e6e6e;
-      font-style: italic;
-    }
-
-    #owner_link {
-      color: rgb(130, 130, 130);
-      font-style: italic;
-      text-decoration: none;
-    }
-
-    #basic_info, #basic_info_2 {
-      text-align: center;
-      background-color: #101010;
-      margin: 10px;
-      padding: 10px;
-    }
-
-    #basic_info_2 {
-      width: 90%;
-    }
-
-    #posts_section {
-      width: 95%;
-      background-color: #101010;
-      margin: 10px;
-      padding: 10px;
-    }
-
-    .post_card {
-      background-color: #1a1a1a;
-      margin: 10px 0;
-      padding: 10px;
-    }
-
-    .post_title {
-      font-weight: bold;
-      font-size: 35px;
-    }
-
-    .post_content {
-      margin-top: 5px;
-      font-size: 30px;
-    }
-
-    .post_meta {
-      font-size: 20px;
-      color: #4d4d4d;
-    }
+    /* Existing CSS styles unchanged */
   </style>
 
   <script>
     const threadIdentifier = "{{thread}}";
 
+    document.getElementById("post_to_thread").onclick = function(){
+      window.location.href = "/posts/create/{{thread}}"
+    }
+
     window.onload = function () {
       Render(threadIdentifier);
     };
+
+    function escapeHTML(str) {
+      if (!str) return "";
+      return str.replace(/[&<>"']/g, function (char) {
+        const escapeChars = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        };
+        return escapeChars[char];
+      });
+    }
 
     async function Subscribe(id) {
       const action = document.getElementById("sub_to_thread").innerText.includes("Unsubscribe")
@@ -201,6 +124,7 @@
           document.getElementById("basic_info").style.display = "none";
           document.getElementById("basic_info_2").style.display = "none";
           document.getElementById("message").innerText = "Thread not found!";
+          document.getElementById("mkthread").style.display = "block";
           document.getElementById("message").style.display = "block";
         }
       } catch (err) {
@@ -226,18 +150,66 @@
         const result = await response.json();
 
         if (result.Posts && result.Posts.length > 0) {
-          result.Posts.forEach(post => {
+          for (const post of result.Posts) {
             const div = document.createElement("div");
             div.className = "post_card";
 
+            const isLiked = post.liked;
+            const likeCount = post.likes;
+
             div.innerHTML = `
-              <div class="post_title">${post.title}</div>
-              <div class="post_meta">by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a> ${new Date(post.timestamp).toLocaleString()}</div>
-              <div class="post_content">${post.content}</div>
+              <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
+              <div class="post_meta">
+                by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a>
+                ${new Date(post.timestamp).toLocaleString()}
+              </div>
+              <div class="post_content">${escapeHTML(post.content)}</div>
+              <div class="post_meta">
+                <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
+                <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
+              </div>
             `;
 
             container.appendChild(div);
+          }
+
+          document.querySelectorAll(".like_btn").forEach(button => {
+            button.onclick = async () => {
+              const postId = button.getAttribute("data-id");
+              const liked = button.getAttribute("data-liked") === "true";
+              const action = liked ? "unlike" : "like";
+
+              try {
+                const res = await fetch("/api/posts/like", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    token: localStorage.getItem("token"),
+                    id: postId,
+                    action
+                  })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                  button.setAttribute("data-liked", (!liked).toString());
+                  button.textContent = liked ? "Like" : "Unlike";
+
+                  const countSpan = document.getElementById(`like_count_${postId}`);
+                  let currentCount = parseInt(countSpan.innerText) || 0;
+                  currentCount = liked ? currentCount - 1 : currentCount + 1;
+                  countSpan.innerText = `${currentCount} like${currentCount !== 1 ? "s" : ""}`;
+                } else {
+                  LoadPosts(threadIdentifier);
+                }
+              } catch (err) {
+                console.error("Like error:", err);
+                alert("An error occurred while liking the post.");
+              }
+            };
           });
+
         } else {
           container.innerHTML = "<p>No posts in this thread yet.</p>";
         }
@@ -247,5 +219,156 @@
       }
     }
   </script>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      display: flex;
+      font-family: Arial, Helvetica, sans-serif;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #mkthread{
+      display: none;
+      text-decoration: none;
+      color: white;
+      font-size: larger;
+    }
+
+    #mkthread:hover{
+      text-decoration: none;
+      color: rgb(125, 125, 125);
+      font-size: larger;
+    }
+
+    .like_btn {
+      background-color: #2a2a2a;
+      color: #cccccc;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 10px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .like_btn:hover {
+      background-color: #3d3d3d;
+    }
+
+    .like_btn:active {
+      background-color: #555555;
+      color: #ffffff;
+    }
+
+    .like_count {
+      font-size: 16px;
+      color: #999999;
+    }
+
+
+    #description {
+      font-style: italic;
+    }
+
+    #thumb {
+      background-size: cover;
+      align-items: center;
+      width: 30%;
+    }
+
+    input, select, button {
+      width: 300px;
+      margin-top: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    #sub_to_thread,#post_to_thread {
+      font-size: large;
+      background-color: #6e6e6e;
+      color: #cccccc;
+    }
+
+    #sub_to_thread,#post_to_thread:hover {
+      background-color: #838383;
+    }
+
+    #sub_to_thread:active,#post_to_thread:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    h2, h3, p {
+      margin: 0;
+    }
+
+    #identifier, #owner {
+      color: #6e6e6e;
+      font-style: italic;
+    }
+
+    #owner_link {
+      color: rgb(130, 130, 130);
+      font-style: italic;
+      text-decoration: none;
+    }
+
+    #basic_info, #basic_info_2 {
+      text-align: center;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    #basic_info_2 {
+      width: 90%;
+    }
+
+    #posts_section {
+      width: 95%;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    .post_card {
+      background-color: #1a1a1a;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .post_title {
+      font-weight: bold;
+      font-size: 30px;
+    }
+
+    .post_content {
+      margin-top: 5px;
+      font-size: 20px;
+    }
+
+    .post_meta {
+      font-size: 20px;
+      color: #4d4d4d;
+    }
+
+    #name{
+      font-size: 35px;
+    }
+
+    #title_text{
+      text-decoration: none;
+      color: white;
+    }
+    
+  </style>
 </body>
 </html>

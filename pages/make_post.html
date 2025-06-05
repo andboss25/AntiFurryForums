@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Post to Thread: {{post}}</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #form_container {
+      width: 90%;
+      max-width: 600px;
+      background-color: #101010;
+      padding: 20px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-size: 18px;
+    }
+
+    input, textarea, button {
+      width: 90%;
+      padding: 10px;
+      margin-top: 5px;
+      border: none;
+      font-size: 16px;
+      resize: none;
+      background-color: #1a1a1a;
+      color: white;
+    }
+
+    button {
+      margin-top: 20px;
+      background-color: #6e6e6e;
+      color: #cccccc;
+      font-size: large;
+    }
+
+    button:hover {
+      background-color: #838383;
+    }
+
+    button:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    #message {
+      margin-top: 20px;
+      color: red;
+      font-weight: bold;
+      display: none;
+    }
+
+    #success {
+      margin-top: 20px;
+      color: lightgreen;
+      font-weight: bold;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Create a Post in Thread: {{post}}</h1>
+  <div id="form_container">
+    <label for="title">Post Title</label>
+    <input type="text" id="title" maxlength="50" placeholder="Enter post title..." />
+
+    <label for="content">Content (max 300 chars)</label>
+    <textarea id="content" maxlength="300" placeholder="Write your post..."></textarea>
+
+    <button onclick="submitPost()">Submit Post</button>
+
+    <p id="message"></p>
+    <p id="success"></p>
+  </div>
+
+  <script>
+    const threadIdentifier = "{{post}}";
+
+    async function submitPost() {
+      const title = document.getElementById("title").value.trim();
+      const content = document.getElementById("content").value.trim();
+      const token = localStorage.getItem("token");
+
+      const errorEl = document.getElementById("message");
+      const successEl = document.getElementById("success");
+      errorEl.style.display = "none";
+      successEl.style.display = "none";
+
+      if (!title || !content) {
+        errorEl.innerText = "Both title and content are required.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/post/post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content,
+            token,
+            thread_identifier: threadIdentifier
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          successEl.innerText = "Post created successfully!";
+          successEl.style.display = "block";
+          setTimeout(() => {
+            window.location.href = `/view/threads/${threadIdentifier}`;
+          }, 1500);
+        } else {
+          errorEl.innerText = result.Error || "Failed to create post.";
+          errorEl.style.display = "block";
+        }
+      } catch (err) {
+        console.error("Post creation error:", err);
+        errorEl.innerText = "An unexpected error occurred.";
+        errorEl.style.display = "block";
+      }
+    }
+  </script>
+</body>
+</html>

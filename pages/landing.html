@@ -22,8 +22,12 @@
             margin: 10px;
         }
     </style>
-    <h1>If you are seeing this , Anti-Furry forums are under development</h1>
-    <img src="\static\AFNETWORK.png"/>
-    <h1>You are welcome to contribute if you wish , contact me on discord at andreiplsno_alt</h1>
+    <script>
+        if (!localStorage.getItem("token")){
+            window.location.href = "/login"
+        } else {
+            window.location.href = "/app"
+        }
+    </script>
 </body>
 </html>

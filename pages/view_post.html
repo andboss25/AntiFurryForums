@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>View Post With Id {{post}}</title>
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-family: Arial, Helvetica, sans-serif;
+      margin: 0; padding: 20px;
+    }
+    a {
+      color: #ccc;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    #post_section, #comments_section {
+      background-color: #101010;
+      padding: 15px;
+      margin-bottom: 20px;
+    }
+    #post_title {
+      font-size: 32px;
+      font-weight: bold;
+    }
+    #post_meta {
+      font-style: italic;
+      color: #6e6e6e;
+      margin-bottom: 10px;
+    }
+    #post_content {
+      font-size: 20px;
+      margin-bottom: 15px;
+    }
+    .like_btn, .comment_like_btn {
+      background-color: #2a2a2a;
+      color: #ccc;
+      border: none;
+      padding: 6px 12px;
+      cursor: pointer;
+      margin-right: 10px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+    .like_btn:hover, .comment_like_btn:hover {
+      background-color: #3d3d3d;
+    }
+    .like_btn:active, .comment_like_btn:active {
+      background-color: #555;
+      color: white;
+    }
+    .like_count {
+      font-size: 16px;
+      color: #999;
+      vertical-align: middle;
+    }
+    #comments_list {
+      margin-top: 10px;
+    }
+    .comment_card {
+      background-color: #1a1a1a;
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+    .comment_meta {
+      font-size: 14px;
+      color: #777;
+      margin-bottom: 5px;
+    }
+    #new_comment_section {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    #new_comment_content {
+      width: 90%;
+      height: 60px;
+      border: none;
+      padding: 10px;
+      font-size: 16px;
+      resize: none;
+      background-color: #2a2a2a;
+      color: white;
+    }
+    #post_comment_btn {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background-color: #6e6e6e;
+      border: none;
+      color: #ccc;
+      cursor: pointer;
+    }
+    #post_comment_btn:hover {
+      background-color: #838383;
+    }
+    #post_comment_btn:active {
+      background-color: #ccc;
+      color: #838383;
+    }
+    #message {
+      color: red;
+      font-weight: bold;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1 id="message"></h1>
+
+  <div id="post_section">
+    <div id="post_title"></div>
+    <div id="post identifier"></div>
+    <div id="post_meta"></div>
+    <div id="post_content"></div>
+    <span id="post_like_count" class="like_count"></span>
+  </div>
+
+  <div id="comments_section">
+    <h2>Comments</h2>
+    <div id="comments_list">
+      <p>Loading comments...</p>
+    </div>
+
+    <div id="new_comment_section">
+      <textarea id="new_comment_content" placeholder="Write a comment (max 100 chars)"></textarea><br />
+      <button id="post_comment_btn">Post Comment</button>
+    </div>
+  </div>
+
+  <script>
+    const postId = "{{post}}";
+
+    if (!localStorage.getItem("token")) {
+      window.location.href = "/login";
+    }
+
+    async function fetchPost() {
+      try {
+        const res = await fetch('/api/post/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          id: postId,
+          search: false
+        }), { method: 'GET' });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          document.getElementById("message").innerText = data.Error || "Failed to load post";
+          return;
+        }
+
+        if (data.Posts && data.Posts.length > 0) {
+          const post = data.Posts[0];
+
+          document.getElementById("post_title").innerText = post.title;
+          document.getElementById("post identifier").innerHTML = `
+            Posted on thread <a href="/view/threads/${post.post_identifier}">/${post.post_identifier}/</a>
+          `;
+          document.getElementById("post_meta").innerHTML = `
+            by <a href="/view/users/${post.owner_username}">@${post.owner_username}</a> - ${new Date(post.timestamp).toLocaleString()}
+          `;
+          document.getElementById("post_content").innerText = post.content;
+
+
+          document.getElementById("post_like_count").innerText = post.likes + " like/s";
+        } else {
+          document.getElementById("message").innerText = "Post not found!";
+        }
+      } catch (err) {
+        console.error("Error loading post:", err);
+        document.getElementById("message").innerText = "Unexpected error loading post.";
+      }
+    }
+
+    async function fetchComments() {
+      const commentsContainer = document.getElementById("comments_list");
+      commentsContainer.innerHTML = "Loading comments...";
+
+      try {
+        const res = await fetch('/api/comments/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          post_id: postId
+        }), { method: 'GET' });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          commentsContainer.innerHTML = `<p>${data.Error || "Failed to load comments"}</p>`;
+          return;
+        }
+
+        if (data.Comments && data.Comments.length > 0) {
+          commentsContainer.innerHTML = "";
+
+          data.Comments.forEach(comment => {
+            const div = document.createElement("div");
+            div.className = "comment_card";
+
+            div.innerHTML = `
+              <div class="comment_meta">
+                <a href="/view/users/${comment.owner_username}">@${comment.owner_username}</a> - ${new Date(comment.timestamp).toLocaleString()}
+              </div>
+              <div class="comment_content">${comment.content}</div>
+              <div>
+              </div>
+            `;
+
+            commentsContainer.appendChild(div);
+          });
+
+        } else {
+          commentsContainer.innerHTML = "<p>No comments yet.</p>";
+        }
+      } catch (err) {
+        console.error("Error loading comments:", err);
+        commentsContainer.innerHTML = "<p>Failed to load comments.</p>";
+      }
+    }
+
+    async function postComment() {
+      const content = document.getElementById("new_comment_content").value.trim();
+      if (content.length === 0) {
+        alert("Comment cannot be empty");
+        return;
+      }
+      if (content.length > 100) {
+        alert("Comment cannot be longer than 100 characters");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/comment/post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: localStorage.getItem("token"),
+            content: content,
+            post_id: postId
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          document.getElementById("new_comment_content").value = "";
+          fetchComments();
+        } else {
+          alert(data.Error || "Failed to post comment.");
+        }
+      } catch (err) {
+        console.error("Error posting comment:", err);
+        alert("An error occurred while posting comment.");
+      }
+    }
+
+    window.onload = async () => {
+      await fetchPost();
+      await fetchComments();
+    };
+
+    document.getElementById("post_comment_btn").onclick = postComment;
+  </script>
+
+</body>
+</html>

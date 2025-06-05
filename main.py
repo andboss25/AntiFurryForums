@@ -103,7 +103,6 @@ conn.close()
 
 # App
 
-# TODO make frontend for all ts
 # TODO add functions for reporting
 # TODO add functions for ban/moderation (admin only)
 # TODO add a feed page (or more)
@@ -156,6 +155,42 @@ def ViewThreadPage(thread):
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/view_thread.html").read(),thread=thread)
+
+@App.route("/threads/create/")
+def CreateThread():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+    
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/make_thread.html").read()
+
+
+@App.route("/app")
+def AppPage():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+    
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/app.html").read()
+
+@App.route("/posts/create/<post>")
+def CreatePost(post):
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return flask.render_template_string(open("pages/make_post.html").read(),post=post)
+
+
+@App.route("/view/post/<post>")
+def ViewPostPage(post):
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return flask.render_template_string(open("pages/view_post.html").read(),post=post)
+
+
 
 # Users api
 
@@ -741,12 +776,14 @@ def ViewPosts():
         posts = cursor.execute("SELECT * FROM posts").fetchall()
     
     liked = [row[0] for row in cursor.execute(
-        "SELECT id FROM liked_posts WHERE username = ?", (username,)
+        "SELECT post_id FROM liked_posts WHERE username = ?", (username,)
     ).fetchall()]
 
     post_list = []
     for post in posts:
-        is_liked = post[0] in liked
+        is_liked = str(post[0]) in liked
+
+        post_likes = cursor.execute("SELECT * FROM liked_posts WHERE post_id=?",(post[0],))
         
         post_dict = {
             "id": post[0],
@@ -757,6 +794,7 @@ def ViewPosts():
             "image_attachment": post[5],
             "liked": is_liked,
             "timestamp": post[6],
+            "likes":len(post_likes.fetchall())
         }
         post_list.append(post_dict)
     conn.commit()
@@ -859,7 +897,7 @@ def LikePost():
 
     elif action == "unlike":
         cursor.execute(
-            "DELETE FROM liked_posts WHERE username=? AND id=?",
+            "DELETE FROM liked_posts WHERE username=? AND post_id=?",
             (username, id)
         )
         conn.commit()
@@ -1022,7 +1060,9 @@ def DeleteComment():
 # Check if all parameters exist
 # Validate token and user
 # Like or unlike based on action
-@App.route("/api/comments/like", methods=["POST"])
+
+# Ts is disabled for now.
+#@App.route("/api/comments/like", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
 @utils.Wrappers.require_json_with_fields(["token", "id", "action"])
 def LikeComment():
