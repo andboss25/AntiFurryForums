@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Your Feed</title>
+  <style>
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      font-family: Arial, Helvetica, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #posts_section {
+      width: 100%;
+      background-color: #101010;
+      margin: 20px;
+      padding: 10px;
+    }
+
+    .post_card {
+      background-color: #1a1a1a;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .post_title {
+      font-weight: bold;
+      font-size: 30px;
+    }
+
+    .post_content {
+      margin-top: 5px;
+      font-size: 20px;
+    }
+
+    .post_meta {
+      font-size: 20px;
+      color: #4d4d4d;
+    }
+
+    .like_btn {
+      background-color: #2a2a2a;
+      color: #cccccc;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-right: 10px;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .like_btn:hover {
+      background-color: #3d3d3d;
+    }
+
+    .like_btn:active {
+      background-color: #555555;
+      color: #ffffff;
+    }
+
+    .like_count {
+      font-size: 16px;
+      color: #999999;
+    }
+
+    #title_text {
+      text-decoration: none;
+      color: white;
+    }
+
+    #owner_link {
+      color: rgb(130, 130, 130);
+      text-decoration: none;
+      font-style: italic;
+    }
+
+    #message {
+      color: red;
+      margin: 20px;
+    }
+
+    #header{
+      width: fit-content;
+      background-color: #2a2a2a;
+      padding: 10px;
+    }
+
+    #header a{
+      background-color: #3d3d3d;
+      color: white;
+      text-decoration: none;
+      padding: 10px;
+      font-size: larger;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <a href="/view/@me">View my account</a>
+    <a href="/threads/create/">Create a thread</a>
+    <a href="/guidlines">Guidlines</a>
+    <a href="/privacy-policy">Privacy Policy</a>
+    <!--TODO MAKE TS PAGE ALSO MAKE HEADER LOOK GOOD-->
+  </div>
+
+  <h1>Your Feed</h1>
+  <div id="message"></div>
+  <div id="posts_section">
+    <h2>Posts</h2>
+    <div id="posts_container"></div>
+  </div>
+
+  <script>
+    window.onload = function () {
+      if (!localStorage.getItem("token")) {
+        window.location.href = "/login";
+        return;
+      }
+
+      LoadFeed();
+    };
+
+    function escapeHTML(str) {
+      if (!str) return "";
+      return str.replace(/[&<>"']/g, function (char) {
+        const escapeChars = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        };
+        return escapeChars[char];
+      });
+    }
+
+    async function LoadFeed() {
+      const container = document.getElementById("posts_container");
+      const message = document.getElementById("message");
+      container.innerHTML = "";
+      message.innerText = "";
+
+      try {
+        const response = await fetch('/api/post/feed?' + new URLSearchParams({
+          token: localStorage.getItem("token")
+        }));
+
+        const result = await response.json();
+
+        if (response.ok && result.Posts && result.Posts.length > 0) {
+          for (const post of result.Posts) {
+            const div = document.createElement("div");
+            div.className = "post_card";
+
+            const isLiked = post.liked;
+            const likeCount = post.likes;
+
+            div.innerHTML = `
+              <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
+              <div class="post_meta">
+                posted on thread <a id="owner_link" href="/view/threads/${post.post_identifier}">/${post.post_identifier}/</a>
+                by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a>
+                ${new Date(post.timestamp).toLocaleString()}
+              </div>
+              <div class="post_content">${escapeHTML(post.content)}</div>
+              <div class="post_meta">
+                <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
+                <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
+              </div>
+            `;
+
+            container.appendChild(div);
+          }
+
+          document.querySelectorAll(".like_btn").forEach(button => {
+            button.onclick = async () => {
+              const postId = button.getAttribute("data-id");
+              const liked = button.getAttribute("data-liked") === "true";
+              const action = liked ? "unlike" : "like";
+
+              try {
+                const res = await fetch("/api/posts/like", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    token: localStorage.getItem("token"),
+                    id: postId,
+                    action
+                  })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                  button.setAttribute("data-liked", (!liked).toString());
+                  button.textContent = liked ? "Like" : "Unlike";
+
+                  const countSpan = document.getElementById(`like_count_${postId}`);
+                  let currentCount = parseInt(countSpan.innerText) || 0;
+                  currentCount = liked ? currentCount - 1 : currentCount + 1;
+                  countSpan.innerText = `${currentCount} like${currentCount !== 1 ? "s" : ""}`;
+                } else {
+                  LoadFeed();
+                }
+              } catch (err) {
+                console.error("Like error:", err);
+                alert("An error occurred while liking the post.");
+              }
+            };
+          });
+        } else {
+          message.innerText = "No posts found in your feed.";
+        }
+      } catch (err) {
+        console.error("Feed fetch error:", err);
+        message.innerText = "An error occurred while loading your feed.";
+      }
+    }
+  </script>
+</body>
+</html>

@@ -7,6 +7,7 @@ from flask import request,jsonify
 import sqlite3
 import hashlib
 import time
+import random
 
 import utils.Wrappers
 import utils.GeneralUtils
@@ -105,9 +106,6 @@ conn.close()
 
 # TODO add functions for reporting
 # TODO add functions for ban/moderation (admin only)
-# TODO add a feed page (or more)
-# TODO add an algorithm for showing posts you may like
-# TODO add a search page for posts
 
 App = flask.Flask(__name__,static_url_path="/static")
 
@@ -122,7 +120,7 @@ def LandingPage():
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/landing.html").read()
+    return open("pages/landing.html", encoding="utf-8").read()
 
 @App.route("/login")
 def LoginPage():
@@ -130,7 +128,7 @@ def LoginPage():
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/login.html").read()
+    return open("pages/login.html", encoding="utf-8").read()
 
 @App.route("/view/users/<username>")
 def ViewUserPage(username):
@@ -138,7 +136,7 @@ def ViewUserPage(username):
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return flask.render_template_string(open("pages/view_username.html").read(),username=username)
+    return flask.render_template_string(open("pages/view_username.html", encoding="utf-8").read(),username=username)
 
 @App.route("/view/@me")
 def ViewMyselfPage():
@@ -146,15 +144,15 @@ def ViewMyselfPage():
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/view_me.html").read()
+    return open("pages/view_me.html", encoding="utf-8").read()
 
 @App.route("/view/threads/<thread>")
 def ViewThreadPage(thread):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
+        return open("pages/blocked.html", encoding="utf-8").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return flask.render_template_string(open("pages/view_thread.html").read(),thread=thread)
+    return flask.render_template_string(open("pages/view_thread.html", encoding="utf-8").read(),thread=thread)
 
 @App.route("/threads/create/")
 def CreateThread():
@@ -162,7 +160,7 @@ def CreateThread():
         return open("pages/blocked.html").read(),403
     
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/make_thread.html").read()
+    return open("pages/make_thread.html", encoding="utf-8").read()
 
 
 @App.route("/app")
@@ -171,7 +169,7 @@ def AppPage():
         return open("pages/blocked.html").read(),403
     
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/app.html").read()
+    return open("pages/app.html", encoding="utf-8").read()
 
 @App.route("/posts/create/<post>")
 def CreatePost(post):
@@ -179,7 +177,7 @@ def CreatePost(post):
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return flask.render_template_string(open("pages/make_post.html").read(),post=post)
+    return flask.render_template_string(open("pages/make_post.html", encoding="utf-8").read(),post=post)
 
 
 @App.route("/view/post/<post>")
@@ -188,7 +186,24 @@ def ViewPostPage(post):
         return open("pages/blocked.html").read(),403
 
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return flask.render_template_string(open("pages/view_post.html").read(),post=post)
+    return flask.render_template_string(open("pages/view_post.html", encoding="utf-8").read(),post=post)
+
+@App.route("/privacy-policy")
+def Policy():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+    
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/policy.html", encoding="utf-8").read()
+
+@App.route("/guidlines")
+def Guidlines():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+    
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/guidlines.html", encoding="utf-8").read()
+
 
 
 
@@ -805,6 +820,105 @@ def ViewPosts():
 
     return jsonify({"Message": "Success", "Posts": post_list}), 200
 
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token, search
+# Validate token and get username
+# Increase chance for posts to be from subscribed threads
+# Add 'liked' flag to each post in response
+@App.route("/api/post/feed", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token"])
+def PostsFeed():
+    data = request.args
+    token = data["token"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    # Subscribed threads
+    subscribed_threads = [row[0] for row in cursor.execute(
+        "SELECT thread_identifier FROM subscribed_threads WHERE username = ?", (username,)
+    ).fetchall()]
+
+    # Posts from subscribed threads (random order)
+    if subscribed_threads:
+        placeholders = ','.join('?' for _ in subscribed_threads)
+        subscribed_posts = cursor.execute(
+            f"""
+            SELECT * FROM posts 
+            WHERE thread_identifier IN ({placeholders}) 
+            ORDER BY RANDOM() 
+            LIMIT 20
+            """, 
+            subscribed_threads
+        ).fetchall()
+    else:
+        subscribed_posts = []
+
+    # Posts from other threads (also random)
+    already_included_ids = [post[0] for post in subscribed_posts]
+    if already_included_ids:
+        placeholders = ','.join('?' for _ in already_included_ids)
+        other_posts = cursor.execute(
+            f"""
+            SELECT * FROM posts 
+            WHERE id NOT IN ({placeholders}) 
+            ORDER BY RANDOM()
+            """, 
+            already_included_ids
+        ).fetchall()
+    else:
+        other_posts = cursor.execute(
+            "SELECT * FROM posts ORDER BY RANDOM() LIMIT 10"
+        ).fetchall()
+
+    posts = subscribed_posts + other_posts
+
+    # Get liked posts for the user
+    liked = [row[0] for row in cursor.execute(
+        "SELECT post_id FROM liked_posts WHERE username = ?", (username,)
+    ).fetchall()]
+
+    post_list = []
+    for post in posts:
+        is_liked = str(post[0]) in liked
+        post_likes = cursor.execute("SELECT COUNT(*) FROM liked_posts WHERE post_id=?", (post[0],)).fetchone()[0]
+
+        post_dict = {
+            "id": post[0],
+            "owner_username": post[1],
+            "post_identifier": post[2],
+            "title": post[3],
+            "content": post[4],
+            "image_attachment": post[5],
+            "liked": is_liked,
+            "timestamp": post[6],
+            "likes": post_likes
+        }
+        post_list.append(post_dict)
+
+    d_set = list(set(post_dict))
+    post_dict = {i:post_dict[i] for i in d_set}
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success", "Posts": post_list}), 200
+
+
+
 # Check if ip is blocked
 # Check if request is JSON
 # Check if it has all parameters needed
@@ -985,7 +1099,7 @@ def ViewComments():
 
     username = user[0]
 
-    comments = cursor.execute("SELECT * FROM comments WHERE post_id=?",post_id).fetchall()
+    comments = cursor.execute("SELECT * FROM comments WHERE post_id=?",(post_id,)).fetchall()
 
     liked = [row[0] for row in cursor.execute(
         "SELECT id FROM liked_comments WHERE username = ?", (username,)

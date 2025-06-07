@@ -25,6 +25,11 @@
             border-radius: 4px;
         }
 
+        #agree_to_policy{
+            width: 10px;
+            margin-right: 10px;
+        }
+
         #login-form {
             display: flex;
             flex-direction: column;
@@ -49,66 +54,78 @@
             <option value="signin">Sign up</option>
         </select>
         <button type="submit" id="submit" onclick="OnSubmitionOfData()">Submit</button>
+        <label for="privacyConsent">
+            <input type="checkbox" id="agree_to_policy"/>I agree to the <a href="/privacy-policy" target="_blank">Privacy Policy</a> and the <a href="/guidlines" target="_blank">Community Guidlines</a>.
+        </label>
+
     </div>
 
     <script>
     async function OnSubmitionOfData(event) {
-        event?.preventDefault();
-
-        const username = document.getElementById("username").value.trim();
-        const password = document.getElementById("password").value.trim();
-        const action = document.getElementById("form-select").value;
         const errorElement = document.getElementById("err");
+        if (document.getElementById("agree_to_policy").checked){
+                event?.preventDefault();
 
-        errorElement.style.display = "none";
+                const username = document.getElementById("username").value.trim();
+                const password = document.getElementById("password").value.trim();
+                const action = document.getElementById("form-select").value;
 
-        if (!username || !password) {
-            errorElement.innerText = "Please fill all fields";
-            errorElement.style.display = "block";
-            return;
-        }
 
-        let response;
+                errorElement.style.display = "none";
 
-        try {
-            if (action === "login") {
-                response = await fetch('/api/login?' + new URLSearchParams({
-                    username: username,
-                    password: password
-                }), {
-                    method: 'GET'
-                });
-            } else {
-                response = await fetch('/api/signup', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        username: username,
-                        password: password
-                    })
-                });
+                if (!username || !password) {
+                    errorElement.innerText = "Please fill all fields";
+                    errorElement.style.display = "block";
+                    return;
+                }
+
+                let response;
+
+                try {
+                    if (action === "login") {
+                        response = await fetch('/api/login?' + new URLSearchParams({
+                            username: username,
+                            password: password
+                        }), {
+                            method: 'GET'
+                        });
+                    } else {
+                        response = await fetch('/api/signup', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                username: username,
+                                password: password
+                            })
+                        });
+                    }
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        errorElement.innerText = result.Error || "Something went wrong";
+                        errorElement.style.display = "block";
+                        return;
+                    }
+
+                    localStorage.setItem("token", result.Token);
+                    window.location.href = "/app"
+                } catch (error) {
+                    errorElement.innerText = "Network or server error: " + error.message;
+                    errorElement.style.display = "block";
+                }
+
+                document.getElementById("username").value = "";
+                document.getElementById("password").value = "";
             }
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                errorElement.innerText = result.Error || "Something went wrong";
-                errorElement.style.display = "block";
-                return;
-            }
-
-            localStorage.setItem("token", result.Token);
-            window.location.href = "/app"
-        } catch (error) {
-            errorElement.innerText = "Network or server error: " + error.message;
+        else {
             errorElement.style.display = "block";
+            errorElement.innerText = "You must agree with the privacy policy and community guidlines!";
         }
-
-        document.getElementById("username").value = "";
-        document.getElementById("password").value = "";
     }
+
     </script>
 </body>
 </html>
