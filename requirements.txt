@@ -1,8 +1,2 @@
-sqlite3
 flask
-hashlib
-functools
-random
-base64
-json
 waitress
