@@ -1449,4 +1449,4 @@ def UsernameToToken():
     return jsonify({"Message": "Success", "Tokens": reports_list}), 200
 
 from waitress import serve
-serve(App, port=80)
+serve(App, host='0.0.0.0', port=80)
