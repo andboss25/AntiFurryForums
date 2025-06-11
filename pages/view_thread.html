@@ -9,6 +9,17 @@
       display: none;
       color: red;
     }
+    
+    #repbtn{
+      color: red;
+      text-decoration: none;
+    }
+
+    
+    #repbtn:hover{
+      color: rgb(255, 86, 86);
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -21,6 +32,7 @@
     <h2 id="name"></h2>
     <h3 id="identifier"></h3>
     <h3 id="owner"></h3>
+    <a id="repbtn" href="/report/{{thread}}">report this thread</a>
     <p id="sub_count"></p>
   </div>
 
@@ -166,6 +178,7 @@
               <div class="post_content">${escapeHTML(post.content)}</div>
               <div class="post_meta">
                 <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
+                <a id="repbtn" href="/report/${post.id}">report this post</a>
                 <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
               </div>
             `;

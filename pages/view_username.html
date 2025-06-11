@@ -9,6 +9,16 @@
             display: none;
             color: red;
         }
+
+        #repbtn{
+            color: red;
+            text-decoration: none;
+        }
+    
+        #repbtn:hover{
+            color: rgb(255, 86, 86);
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
@@ -21,6 +31,7 @@
 
     <div id="basic_info_2">
         <p id="bio"></p>
+        <a id="repbtn">report this account</a>
     </div>
     
     <style>
@@ -99,6 +110,7 @@
                 const result = await response.json();
 
                 if (result.User.Message === "User was found!") {
+                    document.getElementById("repbtn").href = "/report/" + result.User.username
                     document.getElementById("username").innerText = "@" + result.User.username
                     document.getElementById("display_name").innerText = result.User.display_name
                     if (result.User.bio == null){
@@ -107,10 +119,17 @@
                         document.getElementById("bio").innerText = result.User.bio
                     }
                 } else {
-                    document.getElementById("basic_info").style.display = "None";
-                    document.getElementById("basic_info_2").style.display = "None";
-                    document.getElementById("message").innerText = "User not found!";
-                    document.getElementById("message").style.display = "block";
+                    if (result.User.deleted == true){
+                        document.getElementById("basic_info").style.display = "None";
+                        document.getElementById("basic_info_2").style.display = "None";
+                        document.getElementById("message").innerText = "User deleted their account!";
+                        document.getElementById("message").style.display = "block";
+                    } else{
+                        document.getElementById("basic_info").style.display = "None";
+                        document.getElementById("basic_info_2").style.display = "None";
+                        document.getElementById("message").innerText = "User not found!";
+                        document.getElementById("message").style.display = "block";
+                    }
                 }
             } catch (err) {
                 console.error("Fetch error:", err);

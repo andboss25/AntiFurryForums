@@ -25,6 +25,7 @@ conn.execute("""CREATE TABLE IF NOT EXISTS users (
     encrypted_password TEXT NOT NULL,
     admin TINYINT(1) NOT NULL DEFAULT 0,
     banned TINYINT(1) NOT NULL DEFAULT 0,
+    deleted TINYINT(1) NOT NULL DEFAULT 0,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     token TEXT NOT NULL
 );""")
@@ -99,13 +100,25 @@ CREATE TABLE IF NOT EXISTS liked_comments (
 );
 """)
 
+conn.execute("""
+CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    type_of_report TEXT NOT NULL,
+    type_of_resource TEXT NOT NULL,
+    additional_info TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+""")
+
 conn.commit()
 conn.close()
 
-# App
+print("The Anti-furry forums are running!")
+print("This project was created by anti-furries!")
 
-# TODO add functions for reporting
-# TODO add functions for ban/moderation (admin only)
+# App
 
 App = flask.Flask(__name__,static_url_path="/static")
 
@@ -204,7 +217,25 @@ def Guidlines():
     utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/guidlines.html", encoding="utf-8").read()
 
+@App.route("/report/<id>")
+def ReportPage(id):
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
 
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return flask.render_template_string(open("pages/report_form.html", encoding="utf-8").read(),id=id)
+
+randadmin = random.randrange(1000,9999)
+
+print(f"Admin randid is {randadmin}")
+
+@App.route(f"/admin-{str(randadmin)}")
+def AdminPage():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+    return open("pages/admin.html", encoding="utf-8").read()
 
 
 # Users api
@@ -261,6 +292,7 @@ def SignupApi():
 # Check if it has all parameters needed
 # Check if there is a user with that username
 # Check if the password is correct
+# Check if the acc is deleted
 # Return token
 @App.route("/api/login",methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
@@ -280,6 +312,16 @@ def LoginApi():
     if not row or row[0] != enc_pass:
         utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
         return jsonify({"Error": "Invalid password"}), 400
+    
+    row = cursor.execute("SELECT deleted FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
+    if not row or row[0] != 0:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "User is deleted, if you manually deleted this account you can restore it by emailing 'afcommsnet.contact@gmail.com' and stating your intentions!"}), 400
+
+    row = cursor.execute("SELECT banned FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
+    if not row or row[0] != 0:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Your account has been permanently banned off this website! You may appeal at 'afcommsnet.contact@gmail.com' by emailing set adress and stating your intentions! You may also find the specific ban reason from there."}), 400
     
     token = cursor.execute("SELECT token FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()[0]
     
@@ -306,22 +348,27 @@ def UserViewApi():
         utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
         return jsonify({"Error":"Token is invalid"}),400
     
-    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone()
+    user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id,deleted FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone()
     user_obj = {}
 
     if user == None:
         user_obj = {"Message":"No user found!"}
     else:
         is_admin = lambda val:False if val == 0 else True
-        user_obj = {
-            "Message":"User was found!",
-            "username":user[0].lower(),
-            "display_name":user[1],
-            "bio":user[2],
-            "created_on":user[3],
-            "is_admin":  is_admin(user[4]),
-            "user_id":user[5],
-        }
+        is_deleted = lambda val:False if val == 0 else True
+
+        if not is_deleted(user[6]):
+            user_obj = {
+                "Message":"User was found!",
+                "username":user[0].lower(),
+                "display_name":user[1],
+                "bio":user[2],
+                "created_on":user[3],
+                "is_admin":  is_admin(user[4]),
+                "user_id":user[5],
+            }
+        else:
+            user_obj = {"Message":"No user found!","deleted":True}
     
     conn.commit()
     cursor.close()
@@ -376,28 +423,35 @@ def TokenViewApi():
 # Check if request is json
 # Check if it has all parameters needed
 # Check if the token is valid
-# Delete user with given token
+# Set account as deleted
 @App.route("/api/users/delete",methods=["DELETE"])
 @utils.Wrappers.guard_api(addr_list)
 @utils.Wrappers.require_json_with_fields(["token"])
 def UserDeleteApi():
-    cursor,conn = utils.GeneralUtils.InnitDB()
+    cursor, conn = utils.GeneralUtils.InnitDB()
 
-    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.json.get("token"),)).fetchone() == None):
-        # OPTIMIZATION TODO: Make this get the username from token then check token validity
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"Token is invalid"}),400
+    if cursor.execute("SELECT token FROM users WHERE token=?", (request.json.get("token"),)).fetchone() is None:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 400
     
-    # OPTIMIZATION TODO: Make this get the username from token to delete easier
-    cursor.execute("DELETE FROM users WHERE token=?",(request.json.get("token"),))
+    # BUG Possible vuln where user might keep track of their token before deleting their account and use their deleted account to do stuff
+
+    cursor.execute("UPDATE users SET deleted=1 WHERE token=?", (request.json.get("token"),))
     
+
     conn.commit()
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),True,request.path,request.remote_addr)
+    utils.GeneralUtils.TrackIp(
+        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
+        True,
+        request.path,
+        request.remote_addr
+    )
 
-    return jsonify({"Message":"Success"}),200
+    return jsonify({"Message": "Success"}), 200
+
 
 # Check if ip is blocked
 # Check if request is json
@@ -906,8 +960,8 @@ def PostsFeed():
         }
         post_list.append(post_dict)
 
-    d_set = list(set(post_dict))
-    post_dict = {i:post_dict[i] for i in d_set}
+    # Optionally deduplicate by post ID
+    post_list = list({post["id"]: post for post in post_list}.values())
 
     conn.commit()
     cursor.close()
@@ -1175,65 +1229,224 @@ def DeleteComment():
 # Validate token and user
 # Like or unlike based on action
 
-# Ts is disabled for now.
-#@App.route("/api/comments/like", methods=["POST"])
+# Reporting API
+
+@App.route("/api/reports/add", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["token", "id", "action"])
-def LikeComment():
+@utils.Wrappers.require_json_with_fields(["token", "resource_id", "type_of_report", "type_of_resource","additional_info"])
+def PostReport():
     data = request.json
     token = data["token"]
-    id = data["id"]
-    action = data["action"].lower()
+    resource_id = data["resource_id"]
+    type_of_report = data["type_of_report"].lower()
+    type_of_resource = data["type_of_resource"].lower()
+    additional_info = data["additional_info"]
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Invalid token"}), 401
+    
     cursor, conn = utils.GeneralUtils.InnitDB()
 
-    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
-    if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
-        cursor.close()
-        conn.close()
-        return jsonify({"Error": "Token is invalid"}), 400
-
-    thread_exists = cursor.execute("SELECT 1 FROM comments WHERE id=?", (id,)).fetchone()
-    if not thread_exists:
-        cursor.close()
-        conn.close()
-        return jsonify({"Error": "Comment does not exist"}), 404
-
-    if action == "like":
-        existing = cursor.execute(
-            "SELECT 1 FROM liked_comments WHERE username=? AND comment_id=?",
-            (username.lower(), id)
-        ).fetchone()
-
-        if existing:
-            cursor.close()
-            conn.close()
-            return jsonify({"Error": "Already liked"}), 400
-
-        cursor.execute(
-            "INSERT INTO liked_comments(username, comment_id) VALUES (?, ?)",
-            (username, id)
-        )
-        conn.commit()
-
-    elif action == "unlike":
-        cursor.execute(
-            "DELETE FROM liked_comments WHERE username=? AND comment_id=?",
-            (username, id)
-        )
-        conn.commit()
-
-    else:
-        cursor.close()
-        conn.close()
-        return jsonify({"Error": "Action must be either 'like' or 'unlike'"}), 400
-
+    cursor.execute("INSERT INTO reports(username,resource_id,type_of_report,type_of_resource,additional_info) VALUES (?,?,?,?,?)",(username,resource_id,type_of_report,type_of_resource,additional_info,))
+    
+    conn.commit()
     cursor.close()
     conn.close()
     utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
-    return jsonify({"Message": f"Successfully {action}d the comment"}), 200
+    return jsonify({"Message": f"Successfully reported the resource"}), 200
 
-App.run(port=80)
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token
+# If user admin show reports else 404
+@App.route("/api/reports/view", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token"])
+def ViewReports():
+    data = request.args
+    token = data["token"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username,admin FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return """<html lang="en"><head><title>404 Not Found</title>
+<style>
+  .imageye-selected {
+    outline: 2px solid black !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+  }
+</style></head><body><h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+</body></html>""", 404
+
+    username = user[0]
+    is_admin = user[1]
+    if is_admin == 0:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return """<html lang="en"><head><title>404 Not Found</title>
+<style>
+  .imageye-selected {
+    outline: 2px solid black !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+  }
+</style></head><body><h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+</body></html>""", 404
+    
+    reports = cursor.execute("SELECT * FROM reports").fetchall()
+    reports_list = []
+    for report in reports:
+        report_dict = {
+            "id":report[0],
+            "username":report[1],
+            "resource_id":report[2],
+            "type_of_report":report[3],
+            "type_of_resource":report[4],
+            "additional_info":report[5],
+            "timestamp":report[6]
+        }
+        reports_list.append(report_dict)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success", "Reports": reports_list}), 200
+
+# Administration of this website
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the token is valid and admin
+# Set account as banned
+@App.route("/api/users/ban",methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token","username"])
+def BanApi():
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    if cursor.execute("SELECT token FROM users WHERE token=? AND admin=1", (request.json.get("token"),)).fetchone() is None:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    cursor.execute("UPDATE users SET banned=1 WHERE username=?", (request.json.get("username"),))
+    cursor.execute("UPDATE users SET token=? WHERE username=?", (utils.GeneralUtils.GenerateToken("banned-user","QERUDSFKRENDSFMUIJKGRFDYUJRFSJFDSJJSJHFHJDSJSJFDODIOFDOS"),request.json.get("username"),))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(
+        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
+        True,
+        request.path,
+        request.remote_addr
+    )
+
+    return jsonify({"Message": "Success"}), 200
+
+# Check if ip is blocked
+# Check if request is json
+# Check if it has all parameters needed
+# Check if the token is valid and admin
+# Set account as unbanned
+@App.route("/api/users/unban",methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_json_with_fields(["token","username"])
+def UnBanApi():
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    if cursor.execute("SELECT token FROM users WHERE token=? AND admin=1", (request.json.get("token"),)).fetchone() is None:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    cursor.execute("UPDATE users SET banned=0 WHERE username=?", (request.json.get("username"),))
+    cursor.execute(f"UPDATE users SET token=? WHERE username=?", (utils.GeneralUtils.GenerateToken(request.json.get("username"),"QERUDSFKRENDSFMUIJKGRFDYUJRFSJFDSJJSJHFHJDSJSJFDODIOFDOS"),request.json.get("username"),))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(
+        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
+        True,
+        request.path,
+        request.remote_addr
+    )
+
+    return jsonify({"Message": "Success"}), 200
+
+
+# Check if IP is blocked
+# Check for cooldown on IP
+# Validate required parameters: token
+# If user admin show token else 404
+@App.route("/api/admin/tokenact", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.require_query_params(["token","username"])
+def UsernameToToken():
+    data = request.args
+    token = data["token"]
+    username2 = data["username"]
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username,admin FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return """<html lang="en"><head><title>404 Not Found</title>
+<style>
+  .imageye-selected {
+    outline: 2px solid black !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+  }
+</style></head><body><h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+</body></html>""", 404
+
+    username = user[0]
+    is_admin = user[1]
+    if is_admin == 0:
+        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        cursor.close()
+        conn.close()
+        return """<html lang="en"><head><title>404 Not Found</title>
+<style>
+  .imageye-selected {
+    outline: 2px solid black !important;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5) !important;
+  }
+</style></head><body><h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+</body></html>""", 404
+    
+    reports = cursor.execute("SELECT token FROM users WHERE username=?",(username2,)).fetchall()
+    reports_list = []
+    for report in reports:
+        report_dict = {
+            "token":report[0]
+        }
+        reports_list.append(report_dict)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+
+    return jsonify({"Message": "Success", "Tokens": reports_list}), 200
+
+from waitress import serve
+serve(App, port=80)

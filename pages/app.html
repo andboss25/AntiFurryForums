@@ -23,7 +23,7 @@
     }
 
     #posts_section {
-      width: 100%;
+      width: 90%;
       background-color: #101010;
       margin: 20px;
       padding: 10px;
@@ -105,15 +105,26 @@
       padding: 10px;
       font-size: larger;
     }
+
+    #repbtn{
+      color: red;
+      text-decoration: none;
+    }
+
+    
+    #repbtn:hover{
+      color: rgb(255, 86, 86);
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
+  <h3>Anti-furry forums v1.0</h3>
   <div id="header">
     <a href="/view/@me">View my account</a>
     <a href="/threads/create/">Create a thread</a>
     <a href="/guidlines">Guidlines</a>
     <a href="/privacy-policy">Privacy Policy</a>
-    <!--TODO MAKE TS PAGE ALSO MAKE HEADER LOOK GOOD-->
   </div>
 
   <h1>Your Feed</h1>
@@ -167,7 +178,6 @@
 
             const isLiked = post.liked;
             const likeCount = post.likes;
-
             div.innerHTML = `
               <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
               <div class="post_meta">
@@ -178,9 +188,11 @@
               <div class="post_content">${escapeHTML(post.content)}</div>
               <div class="post_meta">
                 <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
+                <a id="repbtn" href="/report/${post.id}">report this post</a>
                 <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
               </div>
             `;
+
 
             container.appendChild(div);
           }
@@ -223,6 +235,9 @@
           });
         } else {
           message.innerText = "No posts found in your feed.";
+          if (result.Error == "Token is invalid"){
+            window.location.href = "/login"
+          }
         }
       } catch (err) {
         console.error("Feed fetch error:", err);

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Submit a Report</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #form_container {
+      width: 90%;
+      max-width: 600px;
+      background-color: #101010;
+      padding: 20px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-size: 18px;
+    }
+
+    input, textarea, select, button {
+      width: 90%;
+      padding: 10px;
+      margin-top: 5px;
+      border: none;
+      font-size: 16px;
+      resize: none;
+      background-color: #1a1a1a;
+      color: white;
+    }
+
+    button {
+      margin-top: 20px;
+      background-color: #6e6e6e;
+      color: #cccccc;
+      font-size: large;
+    }
+
+    button:hover {
+      background-color: #838383;
+    }
+
+    button:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    #message {
+      margin-top: 20px;
+      color: red;
+      font-weight: bold;
+      display: none;
+    }
+
+    #success {
+      margin-top: 20px;
+      color: lightgreen;
+      font-weight: bold;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>Submit a Report</h1>
+  <h2>If you spam TS we might block yer ip and perm ban you</h2>
+  <div id="form_container">
+    <label for="type_of_report">Type of Report</label>
+    <select id="type_of_report">
+      <option value="">-- Select a report type --</option>
+      <option value="spam">Spam</option>
+      <option value="furfaggotry">Furfaggotry (furry content)</option>
+      <option value="harrasment">Harrasment</option>
+      <option value="hate">Hate speech</option>
+      <option value="inappropriate">Inappropriate content (NSFW)</option>
+      <option value="gore">Gore</option>
+      <option value="illegal">Illegal Content</option>
+      <option value="terrorism">Terrorism</option>
+      <option value="hacked">Hacked Account</option>
+      <option value="dipshit">Dipshit (Tuff post)</option>
+      <option value="larp">Larp</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label for="type_of_resource">Type of Resource</label>
+    <select id="type_of_resource">
+      <option value="">-- Select resource type --</option>
+      <option value="account">Account</option>
+      <option value="post">Post</option>
+      <option value="comment">Comment</option>
+      <option value="thread">Thread</option>
+    </select>
+
+    <label for="additional_info">Additional Information</label>
+    <textarea id="additional_info" maxlength="300" placeholder="Optional: Provide more details... Especially your email if you wish to be further contacted..."></textarea>
+
+    <button onclick="submitReport()">Submit Report</button>
+
+    <p id="message"></p>
+    <p id="success"></p>
+  </div>
+
+  <script>
+    async function submitReport() {
+      const resource_id = "{{id}}"
+      const type_of_report = document.getElementById("type_of_report").value.trim();
+      const type_of_resource = document.getElementById("type_of_resource").value.trim();
+      const additional_info = document.getElementById("additional_info").value.trim();
+      const token = localStorage.getItem("token");
+
+      const errorEl = document.getElementById("message");
+      const successEl = document.getElementById("success");
+      errorEl.style.display = "none";
+      successEl.style.display = "none";
+
+      if (!resource_id || !type_of_report || !type_of_resource) {
+        errorEl.innerText = "Resource ID, report type, and resource type are required.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/reports/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token,
+            resource_id,
+            type_of_report,
+            type_of_resource,
+            additional_info
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          successEl.innerText = "Report submitted successfully!";
+          successEl.style.display = "block";
+          setTimeout(() => {
+            window.location.href = "/";
+          }, 1500);
+        } else {
+          errorEl.innerText = result.Error || "Failed to submit report.";
+          errorEl.style.display = "block";
+        }
+      } catch (err) {
+        console.error("Report submission error:", err);
+        errorEl.innerText = "An unexpected error occurred.";
+        errorEl.style.display = "block";
+      }
+    }
+  </script>
+</body>
+</html>

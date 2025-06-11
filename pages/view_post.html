@@ -106,6 +106,16 @@
       font-weight: bold;
       margin-bottom: 15px;
     }
+    
+    #repbtn{
+      color: red;
+      text-decoration: none;
+    }
+    
+    #repbtn:hover{
+      color: rgb(255, 86, 86);
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -118,6 +128,7 @@
     <div id="post_meta"></div>
     <div id="post_content"></div>
     <span id="post_like_count" class="like_count"></span>
+    <a id="repbtn">report this post</a>
   </div>
 
   <div id="comments_section">
@@ -153,6 +164,8 @@
           document.getElementById("message").innerText = data.Error || "Failed to load post";
           return;
         }
+
+        document.getElementById("repbtn").href = "/report/" + postId
 
         if (data.Posts && data.Posts.length > 0) {
           const post = data.Posts[0];
@@ -206,6 +219,7 @@
                 <a href="/view/users/${comment.owner_username}">@${comment.owner_username}</a> - ${new Date(comment.timestamp).toLocaleString()}
               </div>
               <div class="comment_content">${comment.content}</div>
+              <a id="repbtn" href="/report/${comment.id}">report comment</a>
               <div>
               </div>
             `;

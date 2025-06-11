@@ -80,8 +80,10 @@
     </div>
 
     <button id="edit">Edit</button>
+    <button id="delete">Delete Account</button>
 
     <script>
+        
         const token = localStorage.getItem("token");
         let editMode = false;
 
@@ -187,6 +189,40 @@
                 alert("Failed to update profile. Please try again later.");
             }
         }
+
+        document.getElementById("delete").addEventListener("click", async () => {
+            if (!token) {
+                alert("You are not logged in.");
+                return;
+            }
+
+            const confirmation = confirm("Are you sure you want to delete your account? This action is irreversible.");
+            if (!confirmation) return;
+
+            try {
+                const response = await fetch("/api/users/delete", {
+                    method: "DELETE",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ token })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.Message === "Success") {
+                    alert("Your account has been deleted.");
+                    localStorage.removeItem("token");
+                    location.href = "/login";
+                } else {
+                    alert("Error deleting account: " + (result.Error || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Delete error:", err);
+                alert("Failed to delete account. Please try again later.");
+            }
+        });
+
     </script>
 
 </body>

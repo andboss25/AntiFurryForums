@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin Panel</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; max-width: 800px; }
+  input, button, select { padding: 8px; margin: 5px 0; width: 100%; max-width: 300px; }
+  button { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  th { background: #eee; }
+  .error { color: red; }
+  .success { color: green; }
+  .section { margin-bottom: 40px; }
+</style>
+</head>
+<body>
+
+<h1>Admin Panel</h1>
+
+<div class="section" id="tokenSection">
+  <button onclick="loadReports()">View Reports</button>
+  <p id="tokenError" class="error"></p>
+</div>
+
+<div class="section" id="reportsSection" style="display:none;">
+  <h2>Reported Resources</h2>
+  <table id="reportsTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Resource ID</th>
+        <th>Report Type</th>
+        <th>Resource Type</th>
+        <th>Additional Info</th>
+        <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="section" id="banSection" style="display:none;">
+  <h2>Ban/Unban Users</h2>
+
+  <label for="banUsername">Username to Ban:</label>
+  <input type="text" id="banUsername" placeholder="Username to ban" />
+  <button onclick="banUser()">Ban User</button>
+  <p id="banResult"></p>
+
+  <label for="unbanUsername" style="margin-top:20px;">Username to Unban:</label>
+  <input type="text" id="unbanUsername" placeholder="Username to unban" />
+  <button onclick="unbanUser()">Unban User</button>
+  <p id="unbanResult"></p>
+</div>
+
+<div class="section" id="tokenLookupSection" style="display:none;">
+  <h2>Lookup User Token</h2>
+  <label for="lookupUsername">Username:</label>
+  <input type="text" id="lookupUsername" placeholder="Username to lookup" />
+  <button onclick="lookupToken()">Get Token</button>
+  <pre id="lookupResult"></pre>
+</div>
+
+<script>
+  const baseURL = '/api';
+
+  function showError(elementId, message) {
+    const el = document.getElementById(elementId);
+    el.textContent = message;
+    if(message) {
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  async function loadReports() {
+    const token = localStorage.getItem("token")
+    if (!token) {
+      showError('tokenError', 'Please enter your admin token');
+      return;
+    }
+    showError('tokenError', '');
+
+    try {
+      const res = await fetch(`${baseURL}/reports/view?token=${encodeURIComponent(token)}`);
+      if (res.status === 404) {
+        showError('tokenError', 'Invalid admin token or not authorized');
+        document.getElementById('reportsSection').style.display = 'none';
+        document.getElementById('banSection').style.display = 'none';
+        document.getElementById('tokenLookupSection').style.display = 'none';
+        return;
+      }
+      const data = await res.json();
+      if(data.Message !== 'Success') {
+        showError('tokenError', 'Failed to load reports');
+        return;
+      }
+      populateReports(data.Reports);
+      document.getElementById('reportsSection').style.display = 'block';
+      document.getElementById('banSection').style.display = 'block';
+      document.getElementById('tokenLookupSection').style.display = 'block';
+    } catch (err) {
+      showError('tokenError', 'Error fetching reports');
+      console.error(err);
+    }
+  }
+function populateReports(reports) {
+  const tbody = document.querySelector('#reportsTable tbody');
+  tbody.innerHTML = '';
+
+  if (reports.length === 0) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = 7;
+    td.textContent = 'No reports found';
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  for (const report of reports) {
+    const tr = document.createElement('tr');
+
+    const tdId = document.createElement('td');
+    tdId.textContent = report.id;
+
+    const tdUsername = document.createElement('td');
+    tdUsername.textContent = report.username;
+
+    const tdResourceId = document.createElement('td');
+    tdResourceId.textContent = report.resource_id;
+
+    const tdReportType = document.createElement('td');
+    tdReportType.textContent = report.type_of_report;
+
+    const tdResourceType = document.createElement('td');
+    tdResourceType.textContent = report.type_of_resource;
+
+    const tdAdditionalInfo = document.createElement('td');
+    tdAdditionalInfo.textContent = report.additional_info;
+
+    const tdTimestamp = document.createElement('td');
+    tdTimestamp.textContent = report.timestamp;
+
+    tr.appendChild(tdId);
+    tr.appendChild(tdUsername);
+    tr.appendChild(tdResourceId);
+    tr.appendChild(tdReportType);
+    tr.appendChild(tdResourceType);
+    tr.appendChild(tdAdditionalInfo);
+    tr.appendChild(tdTimestamp);
+
+    tbody.appendChild(tr);
+  }
+}
+
+
+  async function banUser() {
+    const token = localStorage.getItem("token")
+    const username = document.getElementById('banUsername').value.trim();
+    const resultEl = document.getElementById('banResult');
+    resultEl.textContent = '';
+    if(!token || !username) {
+      resultEl.textContent = 'Token and username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+    try {
+      const res = await fetch(`${baseURL}/users/ban`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, username })
+      });
+      const data = await res.json();
+      if(res.ok) {
+        resultEl.textContent = data.Message || 'User banned successfully';
+        resultEl.style.color = 'green';
+      } else {
+        resultEl.textContent = data.Error || 'Error banning user';
+        resultEl.style.color = 'red';
+      }
+    } catch(e) {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function unbanUser() {
+    const token = localStorage.getItem("token")
+    const username = document.getElementById('unbanUsername').value.trim();
+    const resultEl = document.getElementById('unbanResult');
+    resultEl.textContent = '';
+    if(!token || !username) {
+      resultEl.textContent = 'Token and username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+    try {
+      const res = await fetch(`${baseURL}/users/unban`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ token, username })
+      });
+      const data = await res.json();
+      if(res.ok) {
+        resultEl.textContent = data.Message || 'User unbanned successfully';
+        resultEl.style.color = 'green';
+      } else {
+        resultEl.textContent = data.Error || 'Error unbanning user';
+        resultEl.style.color = 'red';
+      }
+    } catch(e) {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function lookupToken() {
+    const token = localStorage.getItem("token")
+    const username2 = document.getElementById('lookupUsername').value.trim();
+    const resultEl = document.getElementById('lookupResult');
+    resultEl.textContent = '';
+    if(!token || !username2) {
+      resultEl.textContent = 'Token and username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+    try {
+      const res = await fetch(`${baseURL}/admin/tokenact?token=${encodeURIComponent(token)}&username=${encodeURIComponent(username2)}`);
+      if(res.status === 404) {
+        resultEl.textContent = 'Invalid token or no permission';
+        resultEl.style.color = 'red';
+        return;
+      }
+      const data = await res.json();
+      if(data.Message === 'Success' && data.Tokens.length > 0) {
+        resultEl.textContent = `Token for ${username2}: ${data.Tokens[0].token}`;
+        resultEl.style.color = 'green';
+      } else {
+        resultEl.textContent = 'No token found for user';
+        resultEl.style.color = 'red';
+      }
+    } catch(e) {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+</script>
+
+</body>
+</html>
