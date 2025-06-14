@@ -8,14 +8,24 @@ import sqlite3
 import hashlib
 import time
 import random
+import json
+import requests
 
 import utils.Wrappers
 import utils.GeneralUtils
 
-
 # Innit Database
 
 conn = sqlite3.connect("forum.db")
+configs = json.loads(open("config.json").read())
+
+def Log(content,logfile=configs["logfile"]):
+    if logfile == True:
+        f = open("forums.log","a")
+        f.write(content + "\n")
+        f.close()
+    else:
+        print(content)
 
 conn.execute("""CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,8 +125,11 @@ CREATE TABLE IF NOT EXISTS reports (
 conn.commit()
 conn.close()
 
-print("The Anti-furry forums are running!")
-print("This project was created by anti-furries!")
+
+
+Log("The Anti-furry forums are running!")
+Log("This project was created by anti-furries!")
+Log("Version is: " + configs["version"])
 
 # App
 
@@ -128,115 +141,106 @@ addr_list = {}
 # Webpages
 
 @App.route("/")
+@utils.Wrappers.logdata()
 def LandingPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/landing.html", encoding="utf-8").read()
 
 @App.route("/login")
+@utils.Wrappers.logdata()
 def LoginPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/login.html", encoding="utf-8").read()
 
 @App.route("/view/users/<username>")
+@utils.Wrappers.logdata()
 def ViewUserPage(username):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/view_username.html", encoding="utf-8").read(),username=username)
 
 @App.route("/view/@me")
+@utils.Wrappers.logdata()
 def ViewMyselfPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/view_me.html", encoding="utf-8").read()
 
 @App.route("/view/threads/<thread>")
+@utils.Wrappers.logdata()
 def ViewThreadPage(thread):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html", encoding="utf-8").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/view_thread.html", encoding="utf-8").read(),thread=thread)
 
 @App.route("/threads/create/")
+@utils.Wrappers.logdata()
 def CreateThread():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-    
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+
     return open("pages/make_thread.html", encoding="utf-8").read()
 
-
 @App.route("/app")
+@utils.Wrappers.logdata()
 def AppPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-    
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
-    return open("pages/app.html", encoding="utf-8").read()
+
+    return flask.render_template_string(open("pages/app.html", encoding="utf-8").read(),version=configs["version"])
 
 @App.route("/posts/create/<post>")
+@utils.Wrappers.logdata()
 def CreatePost(post):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/make_post.html", encoding="utf-8").read(),post=post)
 
-
 @App.route("/view/post/<post>")
+@utils.Wrappers.logdata()
 def ViewPostPage(post):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/view_post.html", encoding="utf-8").read(),post=post)
 
 @App.route("/privacy-policy")
+@utils.Wrappers.logdata()
 def Policy():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-    
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+
     return open("pages/policy.html", encoding="utf-8").read()
 
 @App.route("/guidlines")
+@utils.Wrappers.logdata()
 def Guidlines():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-    
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
+
     return open("pages/guidlines.html", encoding="utf-8").read()
 
 @App.route("/report/<id>")
+@utils.Wrappers.logdata()
 def ReportPage(id):
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return flask.render_template_string(open("pages/report_form.html", encoding="utf-8").read(),id=id)
 
-randadmin = random.randrange(1000,9999)
+if configs["admin_pass"] == "":
+    randadmin = random.randrange(1000,9999)
+else:
+    randadmin = configs["admin_pass"]
 
-print(f"Admin randid is {randadmin}")
+Log(f"Admin randid is {randadmin}")
 
 @App.route(f"/admin-{str(randadmin)}")
+@utils.Wrappers.logdata()
 def AdminPage():
     if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
         return open("pages/blocked.html").read(),403
-
-    utils.GeneralUtils.TrackIp(None,True,request.path,request.remote_addr)
     return open("pages/admin.html", encoding="utf-8").read()
-
 
 # Users api
 
@@ -247,25 +251,24 @@ def AdminPage():
 # Check if the given username respects all constraints: lenght of 25 , no spaces , no special char like 'forbidden_chars'
 @App.route("/api/signup",methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["username","password"])
 def SignupApi():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
 
     if not request.is_json:
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"This request is not identified as JSON"}),400
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if not (cursor.execute("SELECT username FROM users WHERE username=?",(request.json.get("username"),)).fetchone() == None):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Username already used"}),400
     
     if not request.json.get("username") or len(request.json.get("username")) >= 25 or any(char in forbidden_chars for char in request.json.get("username")):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
-        return jsonify({"Error":"Username dosen't repsect constrains"}),400
 
-    utils.GeneralUtils.TrackIp(request.json.get("username"),True,request.path,request.remote_addr)
+        return jsonify({"Error":"Username dosen't repsect constrains"}),400
 
     hash_pass = hashlib.sha256()
     hash_pass.update(request.json.get("password").encode())
@@ -284,7 +287,8 @@ def SignupApi():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(request.args.get("username"),True,request.path,request.remote_addr)
+    if configs["webhook"] == True:
+        requests.post(configs["webhook_url"],json={"content":f"Someone created an account '{request.json.get("username")}'"})
 
     return jsonify({"Message":"Success","Token":token}),200
 
@@ -296,12 +300,13 @@ def SignupApi():
 # Return token
 @App.route("/api/login",methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["username","password"])
 def LoginApi():
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT username FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone() == None):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"No user with such username"}),400
     
     enc_pass = hashlib.sha256()
@@ -310,17 +315,17 @@ def LoginApi():
 
     row = cursor.execute("SELECT encrypted_password FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
     if not row or row[0] != enc_pass:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Invalid password"}), 400
     
     row = cursor.execute("SELECT deleted FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
     if not row or row[0] != 0:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "User is deleted, if you manually deleted this account you can restore it by emailing 'afcommsnet.contact@gmail.com' and stating your intentions!"}), 400
 
     row = cursor.execute("SELECT banned FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()
     if not row or row[0] != 0:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Your account has been permanently banned off this website! You may appeal at 'afcommsnet.contact@gmail.com' by emailing set adress and stating your intentions! You may also find the specific ban reason from there."}), 400
     
     token = cursor.execute("SELECT token FROM users WHERE username=?", (request.args.get("username").lower(),)).fetchone()[0]
@@ -328,8 +333,6 @@ def LoginApi():
     conn.commit()
     cursor.close()
     conn.close()
-
-    utils.GeneralUtils.TrackIp(request.args.get("username"),True,request.path,request.remote_addr)
 
     return jsonify({"Message":"Success","Token":token}),200
 
@@ -339,13 +342,14 @@ def LoginApi():
 # Get user parameters from given user and if it returns None then display No user found
 @App.route("/api/users/view",methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["username","token"])
 def UserViewApi():
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
         # OPTIMIZATION TODO: Make this get the username from token then check token validity
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Token is invalid"}),400
     
     user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id,deleted FROM users WHERE username=?",(request.args.get("username").lower(),)).fetchone()
@@ -374,9 +378,37 @@ def UserViewApi():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.args.get("token")),True,request.path,request.remote_addr)
-
     return jsonify({"User":user_obj}),200
+
+# Check if ip is blocked
+# Check if it has all parameters needed
+# Check if the token is valid
+# Get user parameters from given user and if it returns None then display No user found
+@App.route("/api/users/viewall",methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params(["token"])
+def UserViewallApi():
+    cursor,conn = utils.GeneralUtils.InnitDB()
+
+    if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
+        # OPTIMIZATION TODO: Make this get the username from token then check token validity
+
+        return jsonify({"Error":"Token is invalid"}),400
+    
+    users = cursor.execute("SELECT username,id FROM users").fetchall()
+    user_obj = {}
+
+    if users == None:
+        user_obj = {"Message":"No users found!"}
+    else:
+        user_obj = users
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"Users":user_obj}),200
 
 # Check if ip is blocked
 # Check if it has all parameters needed
@@ -384,6 +416,7 @@ def UserViewApi():
 # Get params from user with set token
 @App.route("/api/users/tokendata",methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token"])
 def TokenViewApi():
     
@@ -391,7 +424,7 @@ def TokenViewApi():
 
     if (cursor.execute("SELECT token FROM users WHERE token=?",(request.args.get("token"),)).fetchone() == None):
         # OPTIMIZATION TODO: Make this get the username from token then check token validity
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Token is invalid"}),400
     
     user = cursor.execute("SELECT username,display_name,bio,timestamp,admin,id FROM users WHERE token=?",(request.args.get("token"),)).fetchone()
@@ -415,8 +448,6 @@ def TokenViewApi():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.args.get("token")),True,request.path,request.remote_addr)
-
     return jsonify({"User":user_obj}),200
 
 # Check if ip is blocked
@@ -426,29 +457,23 @@ def TokenViewApi():
 # Set account as deleted
 @App.route("/api/users/delete",methods=["DELETE"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["token"])
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params(["token"])
 def UserDeleteApi():
     cursor, conn = utils.GeneralUtils.InnitDB()
 
-    if cursor.execute("SELECT token FROM users WHERE token=?", (request.json.get("token"),)).fetchone() is None:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+    if cursor.execute("SELECT token FROM users WHERE token=?", (request.args.get("token"),)).fetchone() is None:
+        
         return jsonify({"Error": "Token is invalid"}), 400
     
     # BUG Possible vuln where user might keep track of their token before deleting their account and use their deleted account to do stuff
 
-    cursor.execute("UPDATE users SET deleted=1 WHERE token=?", (request.json.get("token"),))
+    cursor.execute("UPDATE users SET deleted=1 WHERE token=?", (request.args.get("token"),))
     
 
     conn.commit()
     cursor.close()
     conn.close()
-
-    utils.GeneralUtils.TrackIp(
-        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
-        True,
-        request.path,
-        request.remote_addr
-    )
 
     return jsonify({"Message": "Success"}), 200
 
@@ -461,24 +486,25 @@ def UserDeleteApi():
 # Patch to all params needed
 @App.route("/api/users/modify",methods=["PATCH"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token","display_name","bio"])
 def UserModifyApi():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
     display_forbidden_chars = {"#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">"}
     
     if not request.json.get("display_name") or len(request.json.get("display_name")) >= 40 or any(char in display_forbidden_chars for char in request.json.get("display_name")):
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Display name dosen't repsect constrains"}),400
     
     if not request.json.get("bio") or len(request.json.get("bio")) > 200:
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Bio dosen't repsect constrains"}),400
     
     cursor,conn = utils.GeneralUtils.InnitDB()
 
     if (cursor.execute("SELECT token FROM users WHERE token=?",(request.json.get("token"),)).fetchone() == None):
         # OPTIMIZATION TODO: Make this get the username from token then check token validity
-        utils.GeneralUtils.TrackIp(None,False,request.path,request.remote_addr)
+
         return jsonify({"Error":"Token is invalid"}),400
     
     # OPTIMIZATION TODO: Make this get the username from token to delete easier
@@ -487,8 +513,6 @@ def UserModifyApi():
     conn.commit()
     cursor.close()
     conn.close()
-
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),True,request.path,request.remote_addr)
 
     return jsonify({"Message":"Success"}),200
 
@@ -502,6 +526,7 @@ def UserModifyApi():
 # Insert into db
 @App.route("/api/thread/post", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["name","description","identifier","token"])
 def MakeThread():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
@@ -518,18 +543,18 @@ def MakeThread():
         len(name) > 50 or
         len(description) > 200
     ):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Request doesn't respect constraints"}), 400
 
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Token is invalid"}), 401
 
     if cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (identifier,)).fetchone():
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Identifier already used"}), 400
 
     username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
@@ -542,7 +567,8 @@ def MakeThread():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+    if configs["webhook"] == True:
+        requests.post(configs["webhook_url"],json={"content":f"{username} created a thread '{identifier}' with name '{name}' description '{description}'"})
 
     return jsonify({"Message": "Success"}), 200
 
@@ -556,6 +582,7 @@ def MakeThread():
 # Add 'subscribed' flag to each thread in the response
 @App.route("/api/thread/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token", "search"])
 def ViewThreads():
     data = request.args
@@ -566,7 +593,7 @@ def ViewThreads():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -608,7 +635,6 @@ def ViewThreads():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Threads": thread_list}), 200
 
@@ -619,9 +645,10 @@ def ViewThreads():
 # Delete thread if it exists and belongs to user
 @App.route("/api/thread/delete", methods=["DELETE"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields([["token", "identifier"]])
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params((["token", "identifier"]))
 def DeleteThread():
-    data = request.json
+    data = request.args
     token = data["token"]
     identifier = data["identifier"]
 
@@ -629,7 +656,7 @@ def DeleteThread():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Invalid token"}), 401
@@ -639,7 +666,6 @@ def DeleteThread():
     ).fetchone()
 
     if not thread:
-        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
         cursor.close()
         conn.close()
         return jsonify({"Error": "Thread not found or not owned by user"}), 404
@@ -650,7 +676,6 @@ def DeleteThread():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Thread successfully deleted"}), 200
 
@@ -661,6 +686,7 @@ def DeleteThread():
 # Subscribe or unsubscribe based on action
 @App.route("/api/thread/subscribe", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token", "identifier", "action"])
 def SubscribeThread():
     data = request.json
@@ -670,7 +696,7 @@ def SubscribeThread():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Invalid token"}), 401
 
     cursor, conn = utils.GeneralUtils.InnitDB()
@@ -713,7 +739,6 @@ def SubscribeThread():
 
     cursor.close()
     conn.close()
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": f"Successfully {action}d to thread"}), 200
 
@@ -726,6 +751,7 @@ def SubscribeThread():
 # Return the list of subscribed thread identifiers
 @App.route("/api/thread/subscriptions", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token"])
 def ListUserSubscriptions():
     data = request.args
@@ -735,7 +761,7 @@ def ListUserSubscriptions():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -750,7 +776,6 @@ def ListUserSubscriptions():
     cursor.close()
     conn.close()
     
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "SubscribedThreads": subscriptions}), 200
 
@@ -763,6 +788,7 @@ def ListUserSubscriptions():
 # Insert into db
 @App.route("/api/post/post", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["title","content","token","thread_identifier"])
 def MakePost():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
@@ -777,18 +803,18 @@ def MakePost():
         len(content) >= 300 or
         len(title) > 50
     ):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Request doesn't respect constraints"}), 400
 
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Token is invalid"}), 401
     
     if not cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (thread_identifier,)).fetchone():
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "No such thread with this identifier!"}), 400
 
     username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
@@ -801,7 +827,9 @@ def MakePost():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+    
+    if configs["webhook"] == True:
+        requests.post(configs["webhook_url"],json={"content":f"{username} created a post on '{thread_identifier}' with title '{title}' and content '{content}'"})
 
     return jsonify({"Message": "Success"}), 200
 
@@ -814,6 +842,7 @@ def MakePost():
 # Add 'liked' flag to each post in response
 @App.route("/api/post/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token", "search"])
 def ViewPosts():
     data = request.args
@@ -824,7 +853,7 @@ def ViewPosts():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -870,7 +899,6 @@ def ViewPosts():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Posts": post_list}), 200
 
@@ -882,6 +910,7 @@ def ViewPosts():
 # Add 'liked' flag to each post in response
 @App.route("/api/post/feed", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token"])
 def PostsFeed():
     data = request.args
@@ -891,7 +920,7 @@ def PostsFeed():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -967,7 +996,6 @@ def PostsFeed():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Posts": post_list}), 200
 
@@ -980,9 +1008,10 @@ def PostsFeed():
 # Delete post if it exists and belongs to user
 @App.route("/api/posts/delete", methods=["DELETE"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["token", "id"])
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params((["token", "id"]))
 def DeletePost():
-    data = request.json
+    data = request.args
     token = data["token"]
     id = data["id"]
 
@@ -990,7 +1019,7 @@ def DeletePost():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Invalid token"}), 401
@@ -1000,7 +1029,6 @@ def DeletePost():
     ).fetchone()
 
     if not post:
-        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
         cursor.close()
         conn.close()
         return jsonify({"Error": "Post not found or not owned by user"}), 404
@@ -1011,7 +1039,6 @@ def DeletePost():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Post successfully deleted"}), 200
 
@@ -1023,6 +1050,7 @@ def DeletePost():
 # Like or unlike based on action
 @App.route("/api/posts/like", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token", "id", "action"])
 def LikePost():
     data = request.json
@@ -1035,7 +1063,7 @@ def LikePost():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -1077,7 +1105,6 @@ def LikePost():
 
     cursor.close()
     conn.close()
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": f"Successfully {action}d the post"}), 200
 
@@ -1090,6 +1117,7 @@ def LikePost():
 # Insert into db
 @App.route("/api/comment/post", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["content","token","post_id"])
 def MakeComment():
     data = request.json
@@ -1100,18 +1128,18 @@ def MakeComment():
     if (
         len(content) >= 100
     ):
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Request doesn't respect constraints"}), 400
 
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Token is invalid"}), 401
     
     if not cursor.execute("SELECT id FROM posts WHERE id=?", (post_id,)).fetchone():
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "No such post with this id!"}), 400
 
     username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
@@ -1124,9 +1152,12 @@ def MakeComment():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
+    if configs["webhook"] == True:
+        requests.post(configs["webhook_url"],json={"content":f"{username} created a comment on post with id '{post_id}' with content '{content}'"})
+
 
     return jsonify({"Message": "Success"}), 200
+    
 
 # Check if IP is blocked
 # Check for cooldown on IP
@@ -1136,6 +1167,7 @@ def MakeComment():
 # Add 'liked' flag to each comment in response
 @App.route("/api/comments/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token","post_id"])
 def ViewComments():
     data = request.args
@@ -1146,7 +1178,7 @@ def ViewComments():
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
@@ -1176,7 +1208,6 @@ def ViewComments():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Comments": comments_list}), 200
 
@@ -1187,9 +1218,10 @@ def ViewComments():
 # Delete post if it exists and belongs to user
 @App.route("/api/comments/delete", methods=["DELETE"])
 @utils.Wrappers.guard_api(addr_list)
-@utils.Wrappers.require_json_with_fields(["token", "id"])
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params((["token", "id"]))
 def DeleteComment():
-    data = request.json
+    data = request.args
     token = data["token"]
     id = data["id"]
 
@@ -1197,7 +1229,7 @@ def DeleteComment():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Invalid token"}), 401
@@ -1207,7 +1239,6 @@ def DeleteComment():
     ).fetchone()
 
     if not post:
-        utils.GeneralUtils.TrackIp(username, False, request.path, request.remote_addr)
         cursor.close()
         conn.close()
         return jsonify({"Error": "Comment not found or not owned by user"}), 404
@@ -1218,7 +1249,6 @@ def DeleteComment():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Comment successfully deleted"}), 200
 
@@ -1233,6 +1263,7 @@ def DeleteComment():
 
 @App.route("/api/reports/add", methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token", "resource_id", "type_of_report", "type_of_resource","additional_info"])
 def PostReport():
     data = request.json
@@ -1244,7 +1275,7 @@ def PostReport():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Invalid token"}), 401
     
     cursor, conn = utils.GeneralUtils.InnitDB()
@@ -1254,7 +1285,6 @@ def PostReport():
     conn.commit()
     cursor.close()
     conn.close()
-    utils.GeneralUtils.TrackIp(username, True, request.path, request.remote_addr)
 
     return jsonify({"Message": f"Successfully reported the resource"}), 200
 
@@ -1264,6 +1294,7 @@ def PostReport():
 # If user admin show reports else 404
 @App.route("/api/reports/view", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token"])
 def ViewReports():
     data = request.args
@@ -1273,7 +1304,7 @@ def ViewReports():
 
     user = cursor.execute("SELECT username,admin FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return """<html lang="en"><head><title>404 Not Found</title>
@@ -1289,7 +1320,7 @@ def ViewReports():
     username = user[0]
     is_admin = user[1]
     if is_admin == 0:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return """<html lang="en"><head><title>404 Not Found</title>
@@ -1319,7 +1350,6 @@ def ViewReports():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Reports": reports_list}), 200
 
@@ -1332,12 +1362,13 @@ def ViewReports():
 # Set account as banned
 @App.route("/api/users/ban",methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token","username"])
 def BanApi():
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     if cursor.execute("SELECT token FROM users WHERE token=? AND admin=1", (request.json.get("token"),)).fetchone() is None:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Token is invalid"}), 400
 
     cursor.execute("UPDATE users SET banned=1 WHERE username=?", (request.json.get("username"),))
@@ -1346,13 +1377,6 @@ def BanApi():
     conn.commit()
     cursor.close()
     conn.close()
-
-    utils.GeneralUtils.TrackIp(
-        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
-        True,
-        request.path,
-        request.remote_addr
-    )
 
     return jsonify({"Message": "Success"}), 200
 
@@ -1363,12 +1387,13 @@ def BanApi():
 # Set account as unbanned
 @App.route("/api/users/unban",methods=["POST"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_json_with_fields(["token","username"])
 def UnBanApi():
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     if cursor.execute("SELECT token FROM users WHERE token=? AND admin=1", (request.json.get("token"),)).fetchone() is None:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         return jsonify({"Error": "Token is invalid"}), 400
 
     cursor.execute("UPDATE users SET banned=0 WHERE username=?", (request.json.get("username"),))
@@ -1377,13 +1402,6 @@ def UnBanApi():
     conn.commit()
     cursor.close()
     conn.close()
-
-    utils.GeneralUtils.TrackIp(
-        utils.GeneralUtils.GetUsernameFromToken(request.json.get("token")),
-        True,
-        request.path,
-        request.remote_addr
-    )
 
     return jsonify({"Message": "Success"}), 200
 
@@ -1394,6 +1412,7 @@ def UnBanApi():
 # If user admin show token else 404
 @App.route("/api/admin/tokenact", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
 @utils.Wrappers.require_query_params(["token","username"])
 def UsernameToToken():
     data = request.args
@@ -1404,7 +1423,7 @@ def UsernameToToken():
 
     user = cursor.execute("SELECT username,admin FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return """<html lang="en"><head><title>404 Not Found</title>
@@ -1420,7 +1439,7 @@ def UsernameToToken():
     username = user[0]
     is_admin = user[1]
     if is_admin == 0:
-        utils.GeneralUtils.TrackIp(None, False, request.path, request.remote_addr)
+        
         cursor.close()
         conn.close()
         return """<html lang="en"><head><title>404 Not Found</title>
@@ -1444,9 +1463,11 @@ def UsernameToToken():
     cursor.close()
     conn.close()
 
-    utils.GeneralUtils.TrackIp(utils.GeneralUtils.GetUsernameFromToken(data["token"]), True, request.path, request.remote_addr)
 
     return jsonify({"Message": "Success", "Tokens": reports_list}), 200
 
 from waitress import serve
-serve(App, host='0.0.0.0', port=80)
+if configs["revproxy_8080"] == True:
+    serve(App, host='0.0.0.0', port=8080)
+else:
+    serve(App, host='0.0.0.0', port=80)

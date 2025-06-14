@@ -22,6 +22,7 @@
 
 <div class="section" id="tokenSection">
   <button onclick="loadReports()">View Reports</button>
+  <button onclick="loadUsers()">View Users</button>
   <p id="tokenError" class="error"></p>
 </div>
 
@@ -37,6 +38,19 @@
         <th>Resource Type</th>
         <th>Additional Info</th>
         <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="section" id="UserSection" style="display:none;">
+  <h2>Users</h2>
+  <table id="UsersTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -71,7 +85,7 @@
   function showError(elementId, message) {
     const el = document.getElementById(elementId);
     el.textContent = message;
-    if(message) {
+    if (message) {
       el.style.display = 'block';
     } else {
       el.style.display = 'none';
@@ -79,7 +93,7 @@
   }
 
   async function loadReports() {
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token");
     if (!token) {
       showError('tokenError', 'Please enter your admin token');
       return;
@@ -96,7 +110,7 @@
         return;
       }
       const data = await res.json();
-      if(data.Message !== 'Success') {
+      if (data.Message !== 'Success') {
         showError('tokenError', 'Failed to load reports');
         return;
       }
@@ -109,63 +123,95 @@
       console.error(err);
     }
   }
-function populateReports(reports) {
-  const tbody = document.querySelector('#reportsTable tbody');
-  tbody.innerHTML = '';
 
-  if (reports.length === 0) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = 7;
-    td.textContent = 'No reports found';
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-    return;
+  function populateReports(reports) {
+    const tbody = document.querySelector('#reportsTable tbody');
+    tbody.innerHTML = '';
+
+    if (reports.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 7;
+      td.textContent = 'No reports found';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    for (const report of reports) {
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${report.id}</td>
+        <td>${report.username}</td>
+        <td>${report.resource_id}</td>
+        <td>${report.type_of_report}</td>
+        <td>${report.type_of_resource}</td>
+        <td>${report.additional_info}</td>
+        <td>${report.timestamp}</td>
+      `;
+
+      tbody.appendChild(tr);
+    }
   }
 
-  for (const report of reports) {
-    const tr = document.createElement('tr');
+  async function loadUsers() {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      showError('tokenError', 'Please enter your admin token');
+      return;
+    }
+    showError('tokenError', '');
 
-    const tdId = document.createElement('td');
-    tdId.textContent = report.id;
+    try {
+      const res = await fetch(`${baseURL}/users/viewall?token=${encodeURIComponent(token)}`);
+      const data = await res.json();
 
-    const tdUsername = document.createElement('td');
-    tdUsername.textContent = report.username;
+      if (!res.ok || data.Error) {
+        showError('tokenError', data.Error || 'Failed to load users');
+        document.getElementById('UserSection').style.display = 'none';
+        return;
+      }
 
-    const tdResourceId = document.createElement('td');
-    tdResourceId.textContent = report.resource_id;
+      populateUsers(data.Users);
+      document.getElementById('UserSection').style.display = 'block';
 
-    const tdReportType = document.createElement('td');
-    tdReportType.textContent = report.type_of_report;
-
-    const tdResourceType = document.createElement('td');
-    tdResourceType.textContent = report.type_of_resource;
-
-    const tdAdditionalInfo = document.createElement('td');
-    tdAdditionalInfo.textContent = report.additional_info;
-
-    const tdTimestamp = document.createElement('td');
-    tdTimestamp.textContent = report.timestamp;
-
-    tr.appendChild(tdId);
-    tr.appendChild(tdUsername);
-    tr.appendChild(tdResourceId);
-    tr.appendChild(tdReportType);
-    tr.appendChild(tdResourceType);
-    tr.appendChild(tdAdditionalInfo);
-    tr.appendChild(tdTimestamp);
-
-    tbody.appendChild(tr);
+    } catch (err) {
+      console.error(err);
+      showError('tokenError', 'Error fetching users');
+    }
   }
-}
 
+  function populateUsers(users) {
+    const tbody = document.querySelector('#UsersTable tbody');
+    tbody.innerHTML = '';
+
+    if (!users || users.length === 0 || users.Message === 'No users found!') {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 2;
+      td.textContent = 'No users found';
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+
+    for (const user of users) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${user[1]}</td>
+        <td>${user[0]}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  }
 
   async function banUser() {
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token");
     const username = document.getElementById('banUsername').value.trim();
     const resultEl = document.getElementById('banResult');
     resultEl.textContent = '';
-    if(!token || !username) {
+    if (!token || !username) {
       resultEl.textContent = 'Token and username required';
       resultEl.style.color = 'red';
       return;
@@ -173,29 +219,29 @@ function populateReports(reports) {
     try {
       const res = await fetch(`${baseURL}/users/ban`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, username })
       });
       const data = await res.json();
-      if(res.ok) {
+      if (res.ok) {
         resultEl.textContent = data.Message || 'User banned successfully';
         resultEl.style.color = 'green';
       } else {
         resultEl.textContent = data.Error || 'Error banning user';
         resultEl.style.color = 'red';
       }
-    } catch(e) {
+    } catch (e) {
       resultEl.textContent = 'Request failed';
       resultEl.style.color = 'red';
     }
   }
 
   async function unbanUser() {
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token");
     const username = document.getElementById('unbanUsername').value.trim();
     const resultEl = document.getElementById('unbanResult');
     resultEl.textContent = '';
-    if(!token || !username) {
+    if (!token || !username) {
       resultEl.textContent = 'Token and username required';
       resultEl.style.color = 'red';
       return;
@@ -203,49 +249,49 @@ function populateReports(reports) {
     try {
       const res = await fetch(`${baseURL}/users/unban`, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, username })
       });
       const data = await res.json();
-      if(res.ok) {
+      if (res.ok) {
         resultEl.textContent = data.Message || 'User unbanned successfully';
         resultEl.style.color = 'green';
       } else {
         resultEl.textContent = data.Error || 'Error unbanning user';
         resultEl.style.color = 'red';
       }
-    } catch(e) {
+    } catch (e) {
       resultEl.textContent = 'Request failed';
       resultEl.style.color = 'red';
     }
   }
 
   async function lookupToken() {
-    const token = localStorage.getItem("token")
+    const token = localStorage.getItem("token");
     const username2 = document.getElementById('lookupUsername').value.trim();
     const resultEl = document.getElementById('lookupResult');
     resultEl.textContent = '';
-    if(!token || !username2) {
+    if (!token || !username2) {
       resultEl.textContent = 'Token and username required';
       resultEl.style.color = 'red';
       return;
     }
     try {
       const res = await fetch(`${baseURL}/admin/tokenact?token=${encodeURIComponent(token)}&username=${encodeURIComponent(username2)}`);
-      if(res.status === 404) {
+      if (res.status === 404) {
         resultEl.textContent = 'Invalid token or no permission';
         resultEl.style.color = 'red';
         return;
       }
       const data = await res.json();
-      if(data.Message === 'Success' && data.Tokens.length > 0) {
+      if (data.Message === 'Success' && data.Tokens.length > 0) {
         resultEl.textContent = `Token for ${username2}: ${data.Tokens[0].token}`;
         resultEl.style.color = 'green';
       } else {
         resultEl.textContent = 'No token found for user';
         resultEl.style.color = 'red';
       }
-    } catch(e) {
+    } catch (e) {
       resultEl.textContent = 'Request failed';
       resultEl.style.color = 'red';
     }

@@ -200,12 +200,11 @@
             if (!confirmation) return;
 
             try {
-                const response = await fetch("/api/users/delete", {
+                const response = await fetch("/api/users/delete?" + new URLSearchParams({ token }), {
                     method: "DELETE",
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ token })
                 });
 
                 const result = await response.json();
