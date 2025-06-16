@@ -608,6 +608,9 @@ def ViewThreads():
     elif "thread_identifier" in data:
         thread_identifier = data["thread_identifier"]
         threads = cursor.execute("SELECT * FROM threads WHERE identifier=?", (thread_identifier,)).fetchall()
+    elif "filter_by_user" in data:
+        fbu = data["filter_by_user"]
+        threads = cursor.execute("SELECT * FROM threads WHERE owner_username=?", (fbu,)).fetchall()
     else:
         threads = cursor.execute("SELECT * FROM threads").fetchall()
 

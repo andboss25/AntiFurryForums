@@ -1,5 +1,5 @@
 {
-    "logfile":false,
+    "logfile":true,
     "admin_pass":"ihatefurries",
     "version": "1.1 (alpha)",
     "revproxy_8080":false,

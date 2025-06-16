@@ -66,6 +66,17 @@
             color: red;
             display: none;
         }
+
+        #title_text{
+            text-decoration: none;
+            color: white;
+            font-size: larger;
+        }
+
+        #title_text:hover{
+            text-decoration:underline;
+            color: rgb(124, 124, 124);
+        }
     </style>
 </head>
 <body>
@@ -77,6 +88,14 @@
 
     <div id="basic_info">
         <p id="bio"></p>
+    </div>
+
+    <div id="basic_info">
+        <p id="threads-no">No threads made by user</p>
+        <h2>Threads made by user:</h2>
+        <div id="threads_made">
+
+        </div>
     </div>
 
     <button id="edit">Edit</button>
@@ -99,6 +118,20 @@
             });
         };
 
+        function escapeHTML(str) {
+            if (!str) return "";
+            return str.replace(/[&<>"']/g, function (char) {
+                const escapeChars = {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#039;"
+                };
+                return escapeChars[char];
+            });
+        }
+
         async function Render(token) {
             try {
                 if (!token) {
@@ -120,6 +153,30 @@
                     document.getElementById("basic_info").style.display = "none";
                     location.href = "/login";
                 }
+
+                const tresponse = await fetch('/api/thread/view?' + new URLSearchParams({
+                    token: localStorage.getItem("token"),
+                    filter_by_user: result.User.username,
+                    search: false
+                }), { method: 'GET' });
+
+                const tresult = await tresponse.json();
+
+                if (tresult.Threads && tresult.Threads.length > 0) {
+                    document.getElementById("threads-no").style.display = "none";
+                    for (const thread of tresult.Threads) {
+                        const div = document.createElement("div");
+                        div.className = "thread_card";
+
+                        div.innerHTML = `<div id="thread_title"><a href="/view/threads/${thread.identifier}" id="title_text">${escapeHTML(thread.name)}  - <span style=color:grey;">/${thread.identifier}/</span></a></div>`;
+
+                        document.getElementById("threads_made").appendChild(div);
+                    }
+                } else {
+                    console.log("test2");
+                }
+
+
             } catch (err) {
                 console.error("Fetch error:", err);
                 location.href = "/login";
