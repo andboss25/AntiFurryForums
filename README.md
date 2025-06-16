@@ -1,4 +1,4 @@
-# AntiFurryForums V1.0
+# AntiFurryForums V1.1
 
 **This project was created by anti-furries , in a team called "Anti-furry network"**
 **Feel free to contribute (especially the frontend)**
