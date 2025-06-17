@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+</head>
+<body>
+    <style>
+        html,body{
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: black;
+            color: white;
+            display: flex;
+            font-family: Arial, Helvetica, sans-serif;
+            flex-direction: column;
+        }
+
+    #results{
+        padding: 10px;
+    }
+
+    .like_count {
+      font-size: 16px;
+      color: #999999;
+    }
+
+
+    #description {
+      font-style: italic;
+    }
+
+    #thumb {
+      background-size: cover;
+      align-items: center;
+      width: 30%;
+    }
+
+    input, select, button {
+      width: 300px;
+      margin-top: 10px;
+      padding: 10px;
+      border: none;
+      border-radius: 4px;
+    }
+
+    #sub_to_thread,#post_to_thread {
+      font-size: large;
+      background-color: #6e6e6e;
+      color: #cccccc;
+    }
+
+    #sub_to_thread,#post_to_thread:hover {
+      background-color: #838383;
+    }
+
+    #sub_to_thread:active,#post_to_thread:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    h2, h3, p {
+      margin: 0;
+    }
+
+    #identifier, #owner {
+      color: #6e6e6e;
+      font-style: italic;
+    }
+
+    #owner_link {
+      color: rgb(130, 130, 130);
+      font-style: italic;
+      text-decoration: none;
+    }
+
+    #basic_info, #basic_info_2 {
+      text-align: center;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    #basic_info_2 {
+      width: 90%;
+    }
+
+    #posts_section {
+      width: 95%;
+      background-color: #101010;
+      margin: 10px;
+      padding: 10px;
+    }
+
+    .post_card {
+      background-color: #1a1a1a;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .thread_card{
+      background-color: #1a1a1a;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .post_title {
+      font-weight: bold;
+      font-size: 30px;
+    }
+
+    .post_content {
+      margin-top: 5px;
+      font-size: 20px;
+    }
+
+    .post_meta {
+      font-size: 20px;
+      color: #4d4d4d;
+    }
+
+    #name{
+      font-size: 35px;
+    }
+
+    #title_text{
+      text-decoration: none;
+      color: white;
+    }
+
+    #repbtn{
+      color: red;
+      text-decoration: none;
+    }
+
+    #repbtn:hover{
+      color: rgb(255, 86, 86);
+      text-decoration: none;
+    }
+
+    #search-bar{
+        padding: 10px;
+    }
+    
+    </style>
+    <h1 style="padding: 10px;">Search</h1>
+    <div id="search-bar">
+        <input type="search" id="search_term">
+        <button id="lookup">Search...</button>
+        <p id="err" style="display: none;">No results found</p>
+    </div>
+
+    <div id="results">
+        
+    </div>
+
+    <script>
+
+        window.onload = Render;
+        document.getElementById("lookup").onclick = Render;
+        function escapeHTML(str) {
+            if (!str) return "";
+            return str.replace(/[&<>"']/g, function (char) {
+                const escapeChars = {
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#039;"
+                };
+                return escapeChars[char];
+            });
+        }
+
+        async function Render(){
+            try {
+                const container = document.getElementById("results")
+
+                container.innerHTML = "";
+                const token = localStorage.getItem("token");
+                const search_for = document.getElementById("search_term").value
+
+                if (!token) {
+                    location.href = "/login";
+                    return;
+                }
+
+                const threadResponse = await fetch('/api/thread/view?' + new URLSearchParams({
+                    token: token,
+                    search: true,
+                    search_for: search_for
+                }), {
+                    method: 'GET'
+                });
+
+                const threadData = await threadResponse.json();
+                const threads = threadData.Threads;
+
+                const postResponse = await fetch('/api/post/view?' + new URLSearchParams({
+                    token: token,
+                    search: true,
+                    search_for: search_for
+                }), {
+                    method: 'GET'
+                });
+
+                const postData = await postResponse.json();
+                const posts = postData.Posts;
+
+                console.log(postData.Posts)
+
+                if (posts.length === 0 && threads.length === 0){
+                    document.getElementById("err").style.display = "block";
+                } else {
+                    document.getElementById("err").style.display = "none";
+                }
+
+                for(const post of posts){
+                    const div = document.createElement("div");
+                    div.className = "post_card";
+
+                    const isLiked = post.liked;
+                    const likeCount = post.likes;
+
+                    div.innerHTML = `
+                        <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
+                        <div class="post_meta">
+                            posted on thread <a id="owner_link" href="/view/threads/${post.post_identifier}">/${post.post_identifier}/</a>
+                            by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a>
+                            ${new Date(post.timestamp).toLocaleString()}
+                        </div>
+                        <div class="post_content">${escapeHTML(post.content)}</div>
+                        <div class="post_meta">
+                            <a id="repbtn" href="/report/${post.id}">report this post</a>
+                            <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
+                        </div>
+                        `;
+
+                    container.appendChild(div);
+                }
+
+                for(const thread of threads){
+                    const div = document.createElement("div");
+                    div.className = "thread_card";
+
+                    div.innerHTML = `THREAD <h3>${escapeHTML(thread.name)} - <span><a href="/view/threads/${thread.identifier}" id="owner_link">/${escapeHTML(thread.identifier)}/<a/><span/><h3/>Made by <a id="owner_link" href="/view/users/${thread.owner_username}">@${thread.owner_username}<a/>`;
+
+                    container.appendChild(div);
+                }
+
+
+            } catch (err) {
+                console.error("Fetch error:", err);
+                //location.href = "/login";
+            }
+        }
+    </script>
+</body>
+</html>

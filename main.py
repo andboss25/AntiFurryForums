@@ -154,6 +154,14 @@ def LoginPage():
         return open("pages/blocked.html").read(),403
     return open("pages/login.html", encoding="utf-8").read()
 
+@App.route("/search")
+@utils.Wrappers.logdata()
+def SearchPage():
+    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
+        return open("pages/blocked.html").read(),403
+
+    return open("pages/search.html", encoding="utf-8").read()
+
 @App.route("/view/users/<username>")
 @utils.Wrappers.logdata()
 def ViewUserPage(username):
@@ -1469,8 +1477,11 @@ def UsernameToToken():
 
     return jsonify({"Message": "Success", "Tokens": reports_list}), 200
 
-from waitress import serve
-if configs["revproxy_8080"] == True:
-    serve(App, host='0.0.0.0', port=8080)
+if configs["test"] == True:
+    App.run("127.0.0.1",80,True)
 else:
-    serve(App, host='0.0.0.0', port=80)
+    from waitress import serve
+    if configs["revproxy_8080"] == True:
+        serve(App, host='0.0.0.0', port=8080)
+    else:
+        serve(App, host='0.0.0.0', port=80)
