@@ -161,6 +161,7 @@
     }
 
     async function LoadFeed() {
+      const token = localStorage.getItem("token")
       const container = document.getElementById("posts_container");
       const message = document.getElementById("message");
       container.innerHTML = "";
@@ -176,6 +177,17 @@
         if (response.ok && result.Posts && result.Posts.length > 0) {
           for (const post of result.Posts) {
             const div = document.createElement("div");
+            if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")){
+              var imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`
+            } else {
+              if (post.image_attachment.endsWith("mp4")){
+                var imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg" type="video/mp4"/></video>`
+              }
+              else {
+                var imageattach = ""
+              }
+            }
+            
             div.className = "post_card";
 
             const isLiked = post.liked;
@@ -188,6 +200,7 @@
                 ${new Date(post.timestamp).toLocaleString()}
               </div>
               <div class="post_content">${escapeHTML(post.content)}</div>
+              ${imageattach}
               <div class="post_meta">
                 <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
                 <a id="repbtn" href="/report/${post.id}">report this post</a>

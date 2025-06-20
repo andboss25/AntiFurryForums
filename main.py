@@ -2,7 +2,9 @@
 # *idk why i made this open source*
 
 import flask
-from flask import request,jsonify
+from flask import request,jsonify,send_file
+from werkzeug.utils import safe_join
+
 
 import sqlite3
 import hashlib
@@ -10,13 +12,14 @@ import time
 import random
 import json
 import requests
+import os
 
 import utils.Wrappers
 import utils.GeneralUtils
+import utils.DatabaseInit
 
 # Innit Database
 
-conn = sqlite3.connect("forum.db")
 configs = json.loads(open("config.json").read())
 
 def Log(content,logfile=configs["logfile"]):
@@ -27,105 +30,7 @@ def Log(content,logfile=configs["logfile"]):
     else:
         print(content)
 
-conn.execute("""CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username VARCHAR(100) NOT NULL,
-    display_name VARCHAR(150) NOT NULL,
-    bio TEXT,
-    encrypted_password TEXT NOT NULL,
-    admin TINYINT(1) NOT NULL DEFAULT 0,
-    banned TINYINT(1) NOT NULL DEFAULT 0,
-    deleted TINYINT(1) NOT NULL DEFAULT 0,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    token TEXT NOT NULL
-);""")
-
-conn.execute("""CREATE TABLE IF NOT EXISTS ip_data (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    usr_name TEXT,
-    success TINYINT(1) NOT NULL DEFAULT 0,
-    path TEXT NOT NULL,
-    ip TEXT NOT NULL,
-    timestamp TEXT NOT NULL
-);""")
-
-conn.execute("""CREATE TABLE IF NOT EXISTS blocked_ip (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip TEXT NOT NULL,
-    blocked TINYINT(1) NOT NULL DEFAULT 0
-);""")
-
-conn.execute("""CREATE TABLE IF NOT EXISTS threads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT NOT NULL,
-    name VARCHAR(200) NOT NULL,
-    identifier VARCHAR(150) NOT NULL,
-    description TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    image_url TEXT DEFAULT '/static/AFLOGO.png'
-);""")
-
-conn.execute("""CREATE TABLE IF NOT EXISTS posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT NOT NULL,
-    thread_identifier TEXT NOT NULL,
-    title VARCHAR(50) NOT NULL,
-    content TEXT NOT NULL,
-    image_attachment TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);""")
-
-conn.execute("""CREATE TABLE IF NOT EXISTS comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_username TEXT NOT NULL,
-    post_id INTEGER NOT NULL,
-    content TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);""")
-
-conn.execute("""
-CREATE TABLE IF NOT EXISTS subscribed_threads (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
-    thread_identifier TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-
-conn.execute("""
-CREATE TABLE IF NOT EXISTS liked_posts (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
-    post_id TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-
-conn.execute("""
-CREATE TABLE IF NOT EXISTS liked_comments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
-    comment_id TEXT NOT NULL,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-
-conn.execute("""
-CREATE TABLE IF NOT EXISTS reports (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL,
-    resource_id TEXT NOT NULL,
-    type_of_report TEXT NOT NULL,
-    type_of_resource TEXT NOT NULL,
-    additional_info TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-
-conn.commit()
-conn.close()
-
-
+utils.DatabaseInit.InitializeDbStruct()
 
 Log("The Anti-furry forums are running!")
 Log("This project was created by anti-furries!")
@@ -667,7 +572,6 @@ def DeleteThread():
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:
-        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Invalid token"}), 401
@@ -816,7 +720,21 @@ def MakePost():
     ):
         
         return jsonify({"Error": "Request doesn't respect constraints"}), 400
+    
+        
+    try:
+        image_attachment = data["image_attachment"]
+    except KeyError:
+        image_attachment = ""
 
+    # Filter external images for the sake of no zero-click vulns and such
+    if image_attachment.startswith("https://") or image_attachment.startswith("http://"):
+        image_attachment = ""
+    elif image_attachment.startswith("/api/images/view/"):
+        pass
+    else:
+        image_attachment = ""
+        
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
@@ -830,8 +748,8 @@ def MakePost():
 
     username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
     cursor.execute(
-        "INSERT INTO posts(owner_username,thread_identifier,content,title) VALUES (?, ?, ?, ?)",
-        (username,thread_identifier,content,title)
+        "INSERT INTO posts(owner_username,thread_identifier,content,title,image_attachment) VALUES (?, ?, ?, ?, ?)",
+        (username,thread_identifier,content,title,image_attachment)
     )
 
     conn.commit()
@@ -1263,12 +1181,89 @@ def DeleteComment():
 
     return jsonify({"Message": "Comment successfully deleted"}), 200
 
+# Image API
 
-# Check if IP is blocked
-# Check if request is JSON
-# Check if all parameters exist
-# Validate token and user
-# Like or unlike based on action
+@App.route("/api/images/add", methods=["POST"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
+def UploadImage():
+    ALLOWED_MIMETYPES = {"image/png", "image/jpeg", "image/gif", "video/mp4"}
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+    
+    token = request.form.get("token")
+    if not token:
+        return jsonify({"Error": "Missing token"}), 400
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+
+    if not username:
+        return jsonify({"Error": "Invalid token"}), 401
+    
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        return jsonify({"Error": "Token is invalid"}), 401
+
+    if 'file' not in request.files:
+        return jsonify({"Error": "No image attached"}), 400
+
+    image = request.files['file']
+    
+    if image.mimetype not in ALLOWED_MIMETYPES:
+        return jsonify({"Error": "Invalid file"}), 400
+
+    file_bytes = image.read()
+    if len(file_bytes) > configs["MaxUploadSize"] * 1024 * 1024: 
+        return jsonify({"Error": "File too large"}), 413
+    
+    image.seek(0)
+
+    file_type_base = {"image/png":"png", "image/jpeg":"jpeg", "image/gif":"gif", "video/mp4":"mp4"}
+
+    rint = random.randrange(1000,9999)
+
+    image.save(f"Images\\{username}-{rint}.{file_type_base[image.mimetype]}",2048)
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"Message": "Successfully uploaded file","Url":f"/api/images/view/{username}-{rint}.{file_type_base[image.mimetype]}"}), 200
+
+@App.route("/api/images/view/<image>", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
+def ViewImage(image):
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    token = request.args.get("token")
+    if not token:
+        return jsonify({"Error": "Missing token"}), 400
+
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
+    if not username:
+        return jsonify({"Error": "Invalid token"}), 401
+    
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        return jsonify({"Error": "Token is invalid"}), 401
+
+    image_dir = os.path.abspath("Images")
+    image_path = safe_join(image_dir, image)
+
+    if not image_path or not os.path.isfile(image_path):
+        return jsonify({"Error": "Image not found!"}), 404
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    try:
+        return send_file(image_path)
+    except Exception as e:
+        return jsonify({"Error": "Failed to send image"}), 500
+    
 
 # Reporting API
 

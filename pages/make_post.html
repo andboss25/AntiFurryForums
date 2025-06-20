@@ -88,61 +88,88 @@
     <label for="content">Content (max 300 chars)</label>
     <textarea id="content" maxlength="300" placeholder="Write your post..."></textarea>
 
+    <label for="title">Attachment</label>
+    <input type="file" id="fileUpload" accept="image/jpeg,image/png,image/gif,video/mp4">
+
     <button onclick="submitPost()">Submit Post</button>
 
     <p id="message"></p>
     <p id="success"></p>
   </div>
-
   <script>
     const threadIdentifier = "{{post}}";
 
-    async function submitPost() {
-      const title = document.getElementById("title").value.trim();
-      const content = document.getElementById("content").value.trim();
-      const token = localStorage.getItem("token");
+async function submitPost() {
+  const fileInput = document.getElementById("fileUpload");
+  const file = fileInput.files[0];
+  const token = localStorage.getItem("token");
+  const formData = new FormData();
 
-      const errorEl = document.getElementById("message");
-      const successEl = document.getElementById("success");
-      errorEl.style.display = "none";
-      successEl.style.display = "none";
+  if (file) {
+    const customFile = new File([file], file.name, { type: file.type });
+    formData.append("file", customFile, file.name);
+    formData.append("token", token);
+  }
 
-      if (!title || !content) {
-        errorEl.innerText = "Both title and content are required.";
-        errorEl.style.display = "block";
-        return;
+  const title = document.getElementById("title").value.trim();
+  const content = document.getElementById("content").value.trim();
+  const errorEl = document.getElementById("message");
+  const successEl = document.getElementById("success");
+  errorEl.style.display = "none";
+  successEl.style.display = "none";
+
+  if (!title || !content) {
+    errorEl.innerText = "Both title and content are required.";
+    errorEl.style.display = "block";
+    return;
+  }
+
+  let attach = "";
+
+  try {
+    if (file) {
+      const uploadResponse = await fetch("http://127.0.0.1/api/images/add", {
+        method: "POST",
+        body: formData
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Upload failed");
       }
 
-      try {
-        const response = await fetch("/api/post/post", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title,
-            content,
-            token,
-            thread_identifier: threadIdentifier
-          })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-          successEl.innerText = "Post created successfully!";
-          successEl.style.display = "block";
-          setTimeout(() => {
-            window.location.href = `/view/threads/${threadIdentifier}`;
-          }, 1500);
-        } else {
-          errorEl.innerText = result.Error || "Failed to create post.";
-          errorEl.style.display = "block";
-        }
-      } catch (err) {
-        console.error("Post creation error:", err);
-        errorEl.innerText = "An unexpected error occurred.";
-        errorEl.style.display = "block";
-      }
+      const uploadData = await uploadResponse.json();
+      attach = uploadData.Url || "";
     }
+
+    const response = await fetch("/api/post/post", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title,
+        content,
+        token,
+        image_attachment: attach,
+        thread_identifier: threadIdentifier
+      })
+    });
+
+    const result = await response.json();
+
+    if (response.ok) {
+      successEl.innerText = "Post created successfully!";
+      successEl.style.display = "block";
+      setTimeout(() => {
+        window.location.href = `/view/threads/${threadIdentifier}`;
+      }, 1500);
+    } else {
+      errorEl.innerText = result.Error || "Failed to create post.";
+      errorEl.style.display = "block";
+    }
+  } catch (err) {
+    errorEl.innerText = "An unexpected error occurred.";
+    errorEl.style.display = "block";
+  }
+}
   </script>
 </body>
 </html>

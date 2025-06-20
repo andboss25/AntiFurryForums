@@ -128,6 +128,7 @@
     <div id="post identifier"></div>
     <div id="post_meta"></div>
     <div id="post_content"></div>
+    <div id="attach"></div>
     <span id="post_like_count" class="like_count"></span>
     <a id="repbtn">report this post</a>
   </div>
@@ -152,6 +153,8 @@
     }
 
     async function fetchPost() {
+
+      const token = localStorage.getItem("token");
       try {
         const res = await fetch('/api/post/view?' + new URLSearchParams({
           token: localStorage.getItem("token"),
@@ -182,6 +185,22 @@
 
 
           document.getElementById("post_like_count").innerText = post.likes + " like/s";
+
+          if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")){
+              var imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`
+          } else {
+              if (post.image_attachment.endsWith("mp4")){
+                var imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg" type="video/mp4"/></video>`
+              }
+              else {
+                var imageattach = ""
+              }
+          }
+
+          document.getElementById("attach").innerHTML = imageattach
+
+
+            
         } else {
           document.getElementById("message").innerText = "Post not found!";
         }

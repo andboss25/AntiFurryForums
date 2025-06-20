@@ -21,6 +21,13 @@
       color: rgb(255, 86, 86);
       text-decoration: none;
     }
+
+    #postimg{
+        max-width:1000px;
+        max-height:500px;
+        width: auto;
+        height: auto;
+    }
   </style>
 </head>
 <body>
@@ -150,6 +157,7 @@
     }
 
     async function LoadPosts(threadIdentifier) {
+      const token = localStorage.getItem("token")
       const container = document.getElementById("posts_container");
       container.innerHTML = "";
 
@@ -170,6 +178,19 @@
             const isLiked = post.liked;
             const likeCount = post.likes;
 
+            if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")){
+              var imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`
+            } else {
+              if (post.image_attachment.endsWith("mp4")){
+                var imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg" type="video/mp4"/></video>`
+              }
+              else {
+                var imageattach = ""
+              }
+            }
+            
+            
+
             div.innerHTML = `
               <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
               <div class="post_meta">
@@ -177,6 +198,8 @@
                 ${new Date(post.timestamp).toLocaleString()}
               </div>
               <div class="post_content">${escapeHTML(post.content)}</div>
+              ${imageattach}
+              
               <div class="post_meta">
                 <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
                 <a id="repbtn" href="/report/${post.id}">report this post</a>
