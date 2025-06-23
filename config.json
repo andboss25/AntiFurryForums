@@ -1,7 +1,7 @@
 {
     "logfile":true,
     "admin_pass":"ihatefurries",
-    "version": "1.5 (alpha)",
+    "version": "1.6 (alpha)",
     "revproxy_8080":false,
     "webhook":false,
     "webhook_url":"",

@@ -6,7 +6,6 @@
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <title>Your Feed</title>
   <style>
-
     html, body {
       height: 100%;
       margin: 0;
@@ -24,6 +23,13 @@
     }
 
     #posts_section {
+      width: 90%;
+      background-color: #101010;
+      margin: 20px;
+      padding: 10px;
+    }
+
+    #threads_section {
       width: 90%;
       background-color: #101010;
       margin: 20px;
@@ -93,13 +99,13 @@
       margin: 20px;
     }
 
-    #header{
+    #header {
       width: fit-content;
       background-color: #2a2a2a;
       padding: 10px;
     }
 
-    #header a{
+    #header a {
       background-color: #3d3d3d;
       color: white;
       text-decoration: none;
@@ -107,15 +113,28 @@
       font-size: larger;
     }
 
-    #repbtn{
+    #repbtn {
       color: red;
       text-decoration: none;
     }
 
-    
-    #repbtn:hover{
+    #repbtn:hover {
       color: rgb(255, 86, 86);
       text-decoration: none;
+    }
+
+    .thread_card {
+      background-color: #1f1f1f;
+      margin: 10px 0;
+      padding: 10px;
+    }
+
+    .thread_name{
+      margin: 0;
+    }
+
+    #postimg{
+      width: 300px;
     }
   </style>
 </head>
@@ -131,6 +150,12 @@
 
   <h1>Your Feed</h1>
   <div id="message"></div>
+
+  <div id="threads_section">
+    <p>Recomended Threads</p>
+    <div id="threads_container"></div>
+  </div>
+
   <div id="posts_section">
     <h2>Posts</h2>
     <div id="posts_container"></div>
@@ -161,37 +186,36 @@
     }
 
     async function LoadFeed() {
-      const token = localStorage.getItem("token")
+      const token = localStorage.getItem("token");
       const container = document.getElementById("posts_container");
       const message = document.getElementById("message");
       container.innerHTML = "";
       message.innerText = "";
 
       try {
-        const response = await fetch('/api/post/feed?' + new URLSearchParams({
-          token: localStorage.getItem("token")
-        }));
+        const response = await fetch('/api/post/feed?' + new URLSearchParams({ token }));
+        const tresponse = await fetch('/api/thread/recomended?' + new URLSearchParams({ token }));
 
         const result = await response.json();
+        const tresult = await tresponse.json();
 
         if (response.ok && result.Posts && result.Posts.length > 0) {
           for (const post of result.Posts) {
             const div = document.createElement("div");
-            if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")){
-              var imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`
-            } else {
-              if (post.image_attachment.endsWith("mp4")){
-                var imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg" type="video/mp4"/></video>`
-              }
-              else {
-                var imageattach = ""
+            let imageattach = "";
+
+            if (post.image_attachment) {
+              if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")) {
+                imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`;
+              } else if (post.image_attachment.endsWith("mp4")) {
+                imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" type="video/mp4"/></video>`;
               }
             }
-            
-            div.className = "post_card";
 
+            div.className = "post_card";
             const isLiked = post.liked;
             const likeCount = post.likes;
+
             div.innerHTML = `
               <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
               <div class="post_meta">
@@ -207,9 +231,19 @@
                 <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
               </div>
             `;
-
-
             container.appendChild(div);
+          }
+
+          if (tresponse.ok && tresult.Threads && tresult.Threads.length > 0) {
+            for (const thread of tresult.Threads) {
+              const container2 = document.getElementById("threads_container");
+              const div = document.createElement("div");
+              div.className = "thread_card";
+              div.innerHTML = `
+                <div><h3 class="thread_name">Thread:</h3>${thread.name} - <a href="/view/threads/${thread.identifier}" id="title_text">/${escapeHTML(thread.identifier)}/</a></div>
+              `;
+              container2.appendChild(div);
+            }
           }
 
           document.querySelectorAll(".like_btn").forEach(button => {
@@ -250,8 +284,8 @@
           });
         } else {
           message.innerText = "No posts found in your feed.";
-          if (result.Error == "Token is invalid"){
-            window.location.href = "/login"
+          if (result.Error === "Token is invalid") {
+            window.location.href = "/login";
           }
         }
       } catch (err) {

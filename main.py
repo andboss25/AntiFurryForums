@@ -201,7 +201,7 @@ def SignupApi():
     conn.close()
 
     if configs["webhook"] == True:
-        requests.post(configs["webhook_url"],json={"content":f"Someone created an account '{request.json.get("username")}'"})
+        requests.post(configs["webhook_url"], json={"content": f"Someone created an account '{request.json.get('username')}'"})
 
     return jsonify({"Message":"Success","Token":token}),200
 
@@ -831,12 +831,6 @@ def ViewPosts():
 
     return jsonify({"Message": "Success", "Posts": post_list}), 200
 
-# Check if IP is blocked
-# Check for cooldown on IP
-# Validate required parameters: token, search
-# Validate token and get username
-# Increase chance for posts to be from subscribed threads
-# Add 'liked' flag to each post in response
 @App.route("/api/post/feed", methods=["GET"])
 @utils.Wrappers.guard_api(addr_list)
 @utils.Wrappers.logdata()
@@ -928,7 +922,53 @@ def PostsFeed():
 
     return jsonify({"Message": "Success", "Posts": post_list}), 200
 
+@App.route("/api/thread/recomended", methods=["GET"])
+@utils.Wrappers.guard_api(addr_list)
+@utils.Wrappers.logdata()
+@utils.Wrappers.require_query_params(["token"])
+def RecomendThreads():
+    data = request.args
+    token = data["token"]
 
+    cursor, conn = utils.GeneralUtils.InnitDB()
+
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    if not user:
+        
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "Token is invalid"}), 400
+
+    username = user[0]
+
+    threads = cursor.execute("SELECT * FROM threads").fetchall()
+
+    subscribed = cursor.execute(
+        "SELECT thread_identifier FROM subscribed_threads WHERE username=?", (username,)
+    ).fetchall()
+    subscribed_set = set(row[0] for row in subscribed)
+
+    thread_list = []
+    for thread in threads:
+        thread_subs = cursor.execute("SELECT * FROM subscribed_threads WHERE thread_identifier=?",(thread[3],))
+        thread_dict = {
+            "id": thread[0],
+            "owner_username": thread[1],
+            "name": thread[2],
+            "identifier": thread[3],
+            "description": thread[4],
+            "subscribed": thread[3] in subscribed_set,
+            "subscribed_count": len(thread_subs.fetchall())
+        }
+        thread_list.append(thread_dict)
+        
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+    return jsonify({"Message": "Success", "Threads": thread_list}), 200
 
 # Check if ip is blocked
 # Check if request is JSON
@@ -1222,7 +1262,8 @@ def UploadImage():
 
     rint = random.randrange(1000,9999)
 
-    image.save(f"Images\\{username}-{rint}.{file_type_base[image.mimetype]}",2048)
+    filepath = os.path.join("Images", f"{username}-{rint}.{file_type_base[image.mimetype]}")
+    image.save(filepath, 2048)
 
     conn.commit()
     cursor.close()
