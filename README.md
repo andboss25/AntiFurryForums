@@ -1,8 +1,10 @@
-# AntiFurryForums V1.5
+# AntiFurryForums V1.6
 
 **This project was created by anti-furries , in a team called "Anti-furry network"**
 **Feel free to contribute (especially the frontend)**
 This is the source code for the anti-furry forums website backend and frontend.
+
+TODO: Continue refactoring
 
 ## To run this you must:
 
