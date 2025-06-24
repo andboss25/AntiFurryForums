@@ -4,6 +4,8 @@
 **Feel free to contribute (especially the frontend)**
 This is the source code for the anti-furry forums website backend and frontend.
 
+TODO: Continue refactoring
+
 ## To run this you must:
 
 1. have python
