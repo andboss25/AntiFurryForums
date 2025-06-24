@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Post to Thread: {{post}}</title>
+  <title>Create a post</title>
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <style>
     html, body {
@@ -80,7 +80,7 @@
   </style>
 </head>
 <body>
-  <h1>Create a Post in Thread: {{post}}</h1>
+  <h1>Create a Post</h1>
   <div id="form_container">
     <label for="title">Post Title</label>
     <input type="text" id="title" maxlength="50" placeholder="Enter post title..." />
@@ -88,7 +88,13 @@
     <label for="content">Content (max 300 chars)</label>
     <textarea id="content" maxlength="300" placeholder="Write your post..."></textarea>
 
-    <label for="title">Attachment</label>
+    <label for="thread">Thread to post in (Think of threads kind of like 'subreddits' , posts go in threads and comments go to posts):</label>
+    <input list="threads" id="thread" name="gthread" />
+    <datalist id="threads">
+
+    </datalist>
+
+    <label for="fileUpload">Attachment</label>
     <input type="file" id="fileUpload" accept="image/jpeg,image/png,image/gif,video/mp4">
 
     <button onclick="submitPost()">Submit Post</button>
@@ -96,80 +102,106 @@
     <p id="message"></p>
     <p id="success"></p>
   </div>
+
   <script>
-    const threadIdentifier = "{{post}}";
 
-async function submitPost() {
-  const fileInput = document.getElementById("fileUpload");
-  const file = fileInput.files[0];
-  const token = localStorage.getItem("token");
-  const formData = new FormData();
+    async function Render() {
+      try {
+        const response2 = await fetch('/api/thread/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          search: false
+        }), { method: 'GET' });
 
-  if (file) {
-    const customFile = new File([file], file.name, { type: file.type });
-    formData.append("file", customFile, file.name);
-    formData.append("token", token);
-  }
+        if (!response2.ok) {
+          throw new Error("Failed to load threads.");
+        }
 
-  const title = document.getElementById("title").value.trim();
-  const content = document.getElementById("content").value.trim();
-  const errorEl = document.getElementById("message");
-  const successEl = document.getElementById("success");
-  errorEl.style.display = "none";
-  successEl.style.display = "none";
+        const td = await response2.json();
 
-  if (!title || !content) {
-    errorEl.innerText = "Both title and content are required.";
-    errorEl.style.display = "block";
-    return;
-  }
+        for (const Thread of td.Threads) {
+          const child = document.createElement("option");
+          child.value = Thread.identifier;
+          document.getElementById("threads").appendChild(child);
+        }
+      } catch (err) {
+        const errorEl = document.getElementById("message");
+        errorEl.innerText = "Unable to load threads.";
+        errorEl.style.display = "block";
+      }
+    }
+   window.addEventListener('DOMContentLoaded', Render);
 
-  let attach = "";
+    async function submitPost() {
+      const fileInput = document.getElementById("fileUpload");
+      const file = fileInput.files[0];
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
 
-  try {
-    if (file) {
-      const uploadResponse = await fetch("/api/images/add", {
-        method: "POST",
-        body: formData
-      });
+      const title = document.getElementById("title").value.trim();
+      const content = document.getElementById("content").value.trim();
+      const threadIdentifier = document.getElementById("thread").value.trim();
+      const errorEl = document.getElementById("message");
+      const successEl = document.getElementById("success");
 
-      if (!uploadResponse.ok) {
-        throw new Error("Upload failed");
+      errorEl.style.display = "none";
+      successEl.style.display = "none";
+
+      if (!title || !content) {
+        errorEl.innerText = "Both title and content are required.";
+        errorEl.style.display = "block";
+        return;
       }
 
-      const uploadData = await uploadResponse.json();
-      attach = uploadData.Url || "";
+      let attach = "";
+
+      try {
+        if (file) {
+          const customFile = new File([file], file.name, { type: file.type });
+          formData.append("file", customFile, file.name);
+          formData.append("token", token);
+
+          const uploadResponse = await fetch("/api/images/add", {
+            method: "POST",
+            body: formData
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error("Upload failed");
+          }
+
+          const uploadData = await uploadResponse.json();
+          attach = uploadData.Url || "";
+        }
+
+        const response = await fetch("/api/post/post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content,
+            token,
+            image_attachment: attach,
+            thread_identifier: threadIdentifier
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          successEl.innerText = "Post created successfully!";
+          successEl.style.display = "block";
+          setTimeout(() => {
+            window.location.href = `/view/threads/${threadIdentifier}`;
+          }, 1500);
+        } else {
+          errorEl.innerText = result.Error || "Failed to create post.";
+          errorEl.style.display = "block";
+        }
+      } catch (err) {
+        errorEl.innerText = "An unexpected error occurred.";
+        errorEl.style.display = "block";
+      }
     }
-
-    const response = await fetch("/api/post/post", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
-        content,
-        token,
-        image_attachment: attach,
-        thread_identifier: threadIdentifier
-      })
-    });
-
-    const result = await response.json();
-
-    if (response.ok) {
-      successEl.innerText = "Post created successfully!";
-      successEl.style.display = "block";
-      setTimeout(() => {
-        window.location.href = `/view/threads/${threadIdentifier}`;
-      }, 1500);
-    } else {
-      errorEl.innerText = result.Error || "Failed to create post.";
-      errorEl.style.display = "block";
-    }
-  } catch (err) {
-    errorEl.innerText = "An unexpected error occurred.";
-    errorEl.style.display = "block";
-  }
-}
   </script>
 </body>
 </html>

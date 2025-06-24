@@ -136,16 +136,18 @@
     #postimg{
       width: 300px;
     }
+
   </style>
 </head>
 <body>
   <h3>Anti-furry forums {{version}}</h3>
   <div id="header">
-    <a href="/view/@me">View my account</a>
-    <a href="/threads/create/">Create a thread</a>
-    <a href="/guidlines">Guidlines</a>
-    <a href="/privacy-policy">Privacy Policy</a>
-    <a href="/search">Search</a>
+    <a id="lnk" href="/view/@me">View my account</a>
+    <a id="lnk" href="/threads/create/">Create a thread</a>
+    <a id="lnk" href="/posts/create/">Create a post</a>
+    <a id="lnk" href="/guidlines">Guidlines</a>
+    <a id="lnk" href="/privacy-policy">Privacy Policy</a>
+    <a id="lnk" href="/search">Search</a>
   </div>
 
   <h1>Your Feed</h1>
@@ -161,7 +163,8 @@
     <div id="posts_container"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { PostFeed , ThreadFeed } from "/static/scripts/requests.js";
     window.onload = function () {
       if (!localStorage.getItem("token")) {
         window.location.href = "/login";
@@ -193,11 +196,8 @@
       message.innerText = "";
 
       try {
-        const response = await fetch('/api/post/feed?' + new URLSearchParams({ token }));
-        const tresponse = await fetch('/api/thread/recomended?' + new URLSearchParams({ token }));
-
-        const result = await response.json();
-        const tresult = await tresponse.json();
+        const { response, result } = await PostFeed(token);
+        const { response: tresponse, result: tresult } = await ThreadFeed(token);
 
         if (response.ok && result.Posts && result.Posts.length > 0) {
           for (const post of result.Posts) {
@@ -253,7 +253,7 @@
               const action = liked ? "unlike" : "like";
 
               try {
-                const res = await fetch("/api/posts/like", {
+                const res = await fetch("/api/post/like", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({

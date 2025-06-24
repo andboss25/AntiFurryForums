@@ -164,7 +164,7 @@
     showError('tokenError', '');
 
     try {
-      const res = await fetch(`${baseURL}/users/viewall?token=${encodeURIComponent(token)}`);
+      const res = await fetch(`${baseURL}/user/viewall?token=${encodeURIComponent(token)}`);
       const data = await res.json();
 
       if (!res.ok || data.Error) {
@@ -217,7 +217,7 @@
       return;
     }
     try {
-      const res = await fetch(`${baseURL}/users/ban`, {
+      const res = await fetch(`${baseURL}/user/ban`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, username })

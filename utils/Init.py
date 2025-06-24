@@ -1,4 +1,6 @@
+
 import sqlite3
+import json
 
 def InitializeDbStruct():
     conn = sqlite3.connect("forum.db")
@@ -56,7 +58,8 @@ def InitializeDbStruct():
         owner_username TEXT NOT NULL,
         post_id INTEGER NOT NULL,
         content TEXT NOT NULL,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        replies_to TEXT DEFAULT NULL,S
     );""")
 
     conn.execute("""
@@ -100,3 +103,14 @@ def InitializeDbStruct():
 
     conn.commit()
     conn.close()
+
+def RunApp(App):
+    configs = json.loads(open("config.json").read())
+    if configs["test"] == True:
+        App.run("127.0.0.1",80,True)
+    else:
+        from waitress import serve
+        if configs["revproxy_8080"] == True:
+            serve(App, host='0.0.0.0', port=8080)
+        else:
+            serve(App, host='0.0.0.0', port=80)

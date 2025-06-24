@@ -1,10 +1,11 @@
 {
     "logfile":true,
     "admin_pass":"ihatefurries",
-    "version": "1.6 (alpha)",
+    "version": "1.8 (alpha)",
     "revproxy_8080":false,
     "webhook":false,
     "webhook_url":"",
     "test":true,
-    "MaxUploadSize":10
+    "MaxUploadSize":10,
+    "ThreadAdminOnly":true
 }

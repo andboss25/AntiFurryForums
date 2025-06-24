@@ -135,7 +135,7 @@
                     return;
                 }
 
-                const response = await fetch('/api/users/view?' + new URLSearchParams({
+                const response = await fetch('/api/user/view?' + new URLSearchParams({
                     username: username,
                     token: localStorage.getItem("token")
                 }), {

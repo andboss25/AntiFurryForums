@@ -54,14 +54,17 @@
             <option value="login">Login</option>
             <option value="signin">Sign up</option>
         </select>
-        <button type="submit" id="submit" onclick="OnSubmitionOfData()">Submit</button>
+        <button type="submit" id="submit">Submit</button>
         <label for="privacyConsent">
             <input type="checkbox" id="agree_to_policy"/>I agree to the <a href="/privacy-policy" target="_blank">Privacy Policy</a> and the <a href="/guidlines" target="_blank">Community Guidlines</a>.
         </label>
 
     </div>
 
-    <script>
+    <script type="module">
+    import { Login , Signup } from "/static/scripts/requests.js";
+    document.getElementById("submit").addEventListener("click", OnSubmitionOfData);
+
     async function OnSubmitionOfData(event) {
         const errorElement = document.getElementById("err");
         if (document.getElementById("agree_to_policy").checked){
@@ -74,49 +77,37 @@
 
                 errorElement.style.display = "none";
 
+                let response;
+                let result;
+
                 if (!username || !password) {
                     errorElement.innerText = "Please fill all fields";
                     errorElement.style.display = "block";
                     return;
                 }
 
-                let response;
-
                 try {
+                    let response, result;
+
                     if (action === "login") {
-                        response = await fetch('/api/login?' + new URLSearchParams({
-                            username: username,
-                            password: password
-                        }), {
-                            method: 'GET'
-                        });
+                        ({ response, result } = await Login(username, password));
                     } else {
-                        response = await fetch('/api/signup', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                username: username,
-                                password: password
-                            })
-                        });
+                        ({ response, result } = await Signup(username, password));
                     }
 
-                    const result = await response.json();
-
                     if (!response.ok) {
-                        errorElement.innerText = result.Error || "Something went wrong";
+                        errorElement.innerText = result.Error || "Unexpected Error";
                         errorElement.style.display = "block";
                         return;
                     }
 
                     localStorage.setItem("token", result.Token);
-                    window.location.href = "/app"
+                    window.location.href = "/app";
                 } catch (error) {
                     errorElement.innerText = "Network or server error: " + error.message;
                     errorElement.style.display = "block";
                 }
+
 
                 document.getElementById("username").value = "";
                 document.getElementById("password").value = "";

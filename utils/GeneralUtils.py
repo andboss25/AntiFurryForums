@@ -93,4 +93,13 @@ def GetUsernameFromToken(token:str):
     except:
         return None
 
-# Guard api
+configs = json.loads(open("config.json").read())
+
+def Log(content,logfile=configs["logfile"]):
+    if logfile == True:
+        f = open("forums.log","a")
+        f.write(content + "\n")
+        f.close()
+    else:
+        print(content)
+

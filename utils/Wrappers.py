@@ -34,11 +34,19 @@ def logdata():
         return wrapper
     return decorator
 
-def guard_api(addr_list:dict):
+def guard_api(addr_list_getter):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
             
+            # Call the function to get the actual addr_list dict
+            if callable(addr_list_getter):
+                addr_list = addr_list_getter()
+            else:
+                # If someone passes dict directly (backwards compatibility)
+                addr_list = addr_list_getter
+
+            # Determine IP address
             if request.remote_addr == "127.0.0.1":
                 ip = request.headers.get("X-Real-IP")
             else:
