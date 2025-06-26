@@ -164,135 +164,44 @@
   </div>
 
   <script type="module">
-    import { PostFeed , ThreadFeed } from "/static/scripts/requests.js";
-    window.onload = function () {
-      if (!localStorage.getItem("token")) {
+    import { PostFeed , ThreadFeed , LikePost } from "/static/scripts/requests.js";
+    import { LoadPosts , LoadThreads }  from "/static/scripts/render.js";
+
+    window.onload = async function () {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
         window.location.href = "/login";
         return;
       }
 
-      LoadFeed();
-    };
-
-    function escapeHTML(str) {
-      if (!str) return "";
-      return str.replace(/[&<>"']/g, function (char) {
-        const escapeChars = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#039;"
-        };
-        return escapeChars[char];
-      });
-    }
-
-    async function LoadFeed() {
-      const token = localStorage.getItem("token");
-      const container = document.getElementById("posts_container");
+      const postContainer = document.getElementById("posts_container");
+      const threadContainer = document.getElementById("threads_container");
       const message = document.getElementById("message");
-      container.innerHTML = "";
-      message.innerText = "";
+
+      if (!postContainer || !threadContainer || !message) {
+        console.error("Required DOM elements not found.");
+        return;
+      }
 
       try {
         const { response, result } = await PostFeed(token);
-        const { response: tresponse, result: tresult } = await ThreadFeed(token);
-
-        if (response.ok && result.Posts && result.Posts.length > 0) {
-          for (const post of result.Posts) {
-            const div = document.createElement("div");
-            let imageattach = "";
-
-            if (post.image_attachment) {
-              if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")) {
-                imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`;
-              } else if (post.image_attachment.endsWith("mp4")) {
-                imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" type="video/mp4"/></video>`;
-              }
-            }
-
-            div.className = "post_card";
-            const isLiked = post.liked;
-            const likeCount = post.likes;
-
-            div.innerHTML = `
-              <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
-              <div class="post_meta">
-                posted on thread <a id="owner_link" href="/view/threads/${post.post_identifier}">/${post.post_identifier}/</a>
-                by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a>
-                ${new Date(post.timestamp).toLocaleString()}
-              </div>
-              <div class="post_content">${escapeHTML(post.content)}</div>
-              ${imageattach}
-              <div class="post_meta">
-                <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
-                <a id="repbtn" href="/report/${post.id}">report this post</a>
-                <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
-              </div>
-            `;
-            container.appendChild(div);
-          }
-
-          if (tresponse.ok && tresult.Threads && tresult.Threads.length > 0) {
-            for (const thread of tresult.Threads) {
-              const container2 = document.getElementById("threads_container");
-              const div = document.createElement("div");
-              div.className = "thread_card";
-              div.innerHTML = `
-                <div><h3 class="thread_name">Thread:</h3>${thread.name} - <a href="/view/threads/${thread.identifier}" id="title_text">/${escapeHTML(thread.identifier)}/</a></div>
-              `;
-              container2.appendChild(div);
-            }
-          }
-
-          document.querySelectorAll(".like_btn").forEach(button => {
-            button.onclick = async () => {
-              const postId = button.getAttribute("data-id");
-              const liked = button.getAttribute("data-liked") === "true";
-              const action = liked ? "unlike" : "like";
-
-              try {
-                const res = await fetch("/api/post/like", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    token: localStorage.getItem("token"),
-                    id: postId,
-                    action
-                  })
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                  button.setAttribute("data-liked", (!liked).toString());
-                  button.textContent = liked ? "Like" : "Unlike";
-
-                  const countSpan = document.getElementById(`like_count_${postId}`);
-                  let currentCount = parseInt(countSpan.innerText) || 0;
-                  currentCount = liked ? currentCount - 1 : currentCount + 1;
-                  countSpan.innerText = `${currentCount} like${currentCount !== 1 ? "s" : ""}`;
-                } else {
-                  LoadFeed();
-                }
-              } catch (err) {
-                console.error("Like error:", err);
-                alert("An error occurred while liking the post.");
-              }
-            };
-          });
-        } else {
-          message.innerText = "No posts found in your feed.";
-          if (result.Error === "Token is invalid") {
-            window.location.href = "/login";
-          }
-        }
+        LoadPosts(token, postContainer, message, response, result);
       } catch (err) {
-        console.error("Feed fetch error:", err);
-        message.innerText = "An error occurred while loading your feed.";
+        console.error("Error loading posts:", err);
+        message.innerText = "Could not load posts.";
       }
-    }
+
+      try {
+        const { response: tresponse, result: tresult } = await ThreadFeed(token);
+        LoadThreads(threadContainer, tresponse, tresult);
+      } catch (err) {
+        console.error("Error loading threads:", err);
+        threadContainer.innerHTML = "<p>Could not load recommended threads.</p>";
+      }
+    };
+
+
   </script>
 </body>
 </html>

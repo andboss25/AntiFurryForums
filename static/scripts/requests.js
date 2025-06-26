@@ -52,6 +52,26 @@ export async function Signup(Username, Password) {
     });
 }
 
+// THREAD API
+
+export async function ViewThread(Token,Identifier,Search) {
+    return GetRequestWithParams(ApiEndpoint  + "thread/view", new URLSearchParams({
+        token:Token,
+        thread_identifier: Identifier,
+        search: false
+    }));
+}
+
+// POST API 
+
+export async function LikePost(Token,Id,Action) {
+    return PostRequestWithBody(ApiEndpoint  + "post/like",{
+        token:Token,
+        id: Id,
+        action: Action
+    });
+}
+
 // FEED API
 export async function PostFeed(Token) {
     return GetRequestWithParams(ApiEndpoint  + "feed/post", new URLSearchParams({

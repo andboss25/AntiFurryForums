@@ -6,253 +6,6 @@
   <title>View {{thread}}</title>
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
   <style>
-    #message {
-      display: none;
-      color: red;
-    }
-    
-    #repbtn{
-      color: red;
-      text-decoration: none;
-    }
-
-    
-    #repbtn:hover{
-      color: rgb(255, 86, 86);
-      text-decoration: none;
-    }
-
-    #postimg{
-        max-width:1000px;
-        max-height:500px;
-        width: auto;
-        height: auto;
-    }
-  </style>
-</head>
-<body>
-  <h1 id="message"></h1>
-  <a id="mkthread" href="/threads/create">Make a thread.</a>
-  
-
-  <div id="basic_info">
-    <img src="/static/antifurr_hd.jpeg" alt="antifurry flag image" id="thumb">
-    <h2 id="name"></h2>
-    <h3 id="identifier"></h3>
-    <h3 id="owner"></h3>
-    <a id="repbtn" href="/report/{{thread}}">report this thread</a>
-    <p id="sub_count"></p>
-  </div>
-
-  <div id="basic_info_2">
-    <p id="description"></p>
-    <button id="sub_to_thread">Subscribe to thread</button>
-  </div>
-
-  <div id="posts_section">
-    <h2>Posts</h2>
-    <div id="posts_container"></div>
-  </div>
-
-  <style>
-    /* Existing CSS styles unchanged */
-  </style>
-
-  <script>
-    const threadIdentifier = "{{thread}}";
-
-    window.onload = function () {
-      Render(threadIdentifier);
-    };
-
-    function escapeHTML(str) {
-      if (!str) return "";
-      return str.replace(/[&<>"']/g, function (char) {
-        const escapeChars = {
-          "&": "&amp;",
-          "<": "&lt;",
-          ">": "&gt;",
-          '"': "&quot;",
-          "'": "&#039;"
-        };
-        return escapeChars[char];
-      });
-    }
-
-    async function Subscribe(id) {
-      const action = document.getElementById("sub_to_thread").innerText.includes("Unsubscribe")
-        ? "unsubscribe"
-        : "subscribe";
-
-      try {
-        const response = await fetch('/api/thread/subscribe', {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: localStorage.getItem("token"),
-            identifier: id,
-            action: action
-          })
-        });
-
-        const result = await response.json();
-        if (response.ok) {
-          await Render(id);
-        } else {
-          alert(result.Error || "Subscription action failed.");
-        }
-      } catch (error) {
-        console.error("Subscription error:", error);
-        alert("An error occurred while trying to subscribe.");
-      }
-    }
-
-    async function Render(identifier) {
-      if (!localStorage.getItem("token")) {
-        window.location.href = "/login";
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/thread/view?' + new URLSearchParams({
-          token: localStorage.getItem("token"),
-          thread_identifier: identifier,
-          search: false
-        }), { method: 'GET' });
-
-        const result = await response.json();
-
-        if (result.Threads && result.Threads.length > 0) {
-          const thread = result.Threads[0];
-          document.getElementById("identifier").innerText = "/" + thread.identifier;
-          document.getElementById("owner").innerHTML = `owned by <a id="owner_link" href="/view/users/${thread.owner_username}">@${thread.owner_username}</a>`;
-          document.getElementById("name").innerText = thread.name;
-          document.getElementById("sub_count").innerText = "subscriber count: " + thread.subscribed_count;
-          document.getElementById("description").innerText = '"' + (thread.description?.trim() || "No description set for this thread.") + '"';
-
-          const subBtn = document.getElementById("sub_to_thread");
-          subBtn.innerText = thread.subscribed ? "Unsubscribe from thread" : "Subscribe to thread";
-          subBtn.onclick = () => Subscribe(thread.identifier);
-
-          LoadPosts(thread.identifier);
-        } else {
-          document.getElementById("basic_info").style.display = "none";
-          document.getElementById("basic_info_2").style.display = "none";
-          document.getElementById("message").innerText = "Thread not found!";
-          document.getElementById("mkthread").style.display = "block";
-          document.getElementById("message").style.display = "block";
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
-        document.getElementById("basic_info").style.display = "none";
-        document.getElementById("basic_info_2").style.display = "none";
-        document.getElementById("message").innerText = "An unexpected error occurred.";
-        document.getElementById("message").style.display = "block";
-      }
-    }
-
-    async function LoadPosts(threadIdentifier) {
-      const token = localStorage.getItem("token")
-      const container = document.getElementById("posts_container");
-      container.innerHTML = "";
-
-      try {
-        const response = await fetch('/api/post/view?' + new URLSearchParams({
-          token: localStorage.getItem("token"),
-          post_identifier: threadIdentifier,
-          search: false
-        }));
-
-        const result = await response.json();
-
-        if (result.Posts && result.Posts.length > 0) {
-          for (const post of result.Posts) {
-            const div = document.createElement("div");
-            div.className = "post_card";
-
-            const isLiked = post.liked;
-            const likeCount = post.likes;
-
-            if (post.image_attachment.endsWith("png") || post.image_attachment.endsWith("jpeg") || post.image_attachment.endsWith("gif")){
-              var imageattach = `<img src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg"/>`
-            } else {
-              if (post.image_attachment.endsWith("mp4")){
-                var imageattach = `<video width="320" height="240" controls><source src="${post.image_attachment + "?token=" + token}" alt="Image failed to load" id="postimg" type="video/mp4"/></video>`
-              }
-              else {
-                var imageattach = ""
-              }
-            }
-            
-            
-
-            div.innerHTML = `
-              <div class="post_title"><a href="/view/post/${post.id}" id="title_text">${escapeHTML(post.title)}</a></div>
-              <div class="post_meta">
-                by <a id="owner_link" href="/view/users/${post.owner_username}">@${post.owner_username}</a>
-                ${new Date(post.timestamp).toLocaleString()}
-              </div>
-              <div class="post_content">${escapeHTML(post.content)}</div>
-              ${imageattach}
-              
-              <div class="post_meta">
-                <button class="like_btn" data-id="${post.id}" data-liked="${isLiked}">${isLiked ? "Unlike" : "Like"}</button>
-                <a id="repbtn" href="/report/${post.id}">report this post</a>
-                <span class="like_count" id="like_count_${post.id}">${likeCount} like${likeCount !== 1 ? "s" : ""}</span>
-              </div>
-            `;
-
-            container.appendChild(div);
-          }
-
-          document.querySelectorAll(".like_btn").forEach(button => {
-            button.onclick = async () => {
-              const postId = button.getAttribute("data-id");
-              const liked = button.getAttribute("data-liked") === "true";
-              const action = liked ? "unlike" : "like";
-
-              try {
-                const res = await fetch("/api/post/like", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    token: localStorage.getItem("token"),
-                    id: postId,
-                    action
-                  })
-                });
-
-                const data = await res.json();
-
-                if (res.ok) {
-                  button.setAttribute("data-liked", (!liked).toString());
-                  button.textContent = liked ? "Like" : "Unlike";
-
-                  const countSpan = document.getElementById(`like_count_${postId}`);
-                  let currentCount = parseInt(countSpan.innerText) || 0;
-                  currentCount = liked ? currentCount - 1 : currentCount + 1;
-                  countSpan.innerText = `${currentCount} like${currentCount !== 1 ? "s" : ""}`;
-                } else {
-                  LoadPosts(threadIdentifier);
-                }
-              } catch (err) {
-                console.error("Like error:", err);
-                alert("An error occurred while liking the post.");
-              }
-            };
-          });
-
-        } else {
-          container.innerHTML = "<p>No posts in this thread yet.</p>";
-        }
-      } catch (err) {
-        console.error("Error loading posts:", err);
-        container.innerHTML = "<p>Failed to load posts.</p>";
-      }
-    }
-  </script>
-
-  <style>
     html, body {
       height: 100%;
       margin: 0;
@@ -400,7 +153,70 @@
       text-decoration: none;
       color: white;
     }
+        #message {
+      display: none;
+      color: red;
+    }
     
+    #repbtn{
+      color: red;
+      text-decoration: none;
+    }
+
+    
+    #repbtn:hover{
+      color: rgb(255, 86, 86);
+      text-decoration: none;
+    }
+
+    #postimg{
+        max-width:1000px;
+        max-height:500px;
+        width: auto;
+        height: auto;
+    }
   </style>
+</head>
+<body>
+  <h1 id="message"></h1>
+  <a id="mkthread" href="/threads/create">Make a thread.</a>
+  
+
+  <div id="basic_info">
+    <img src="/static/antifurr_hd.jpeg" alt="antifurry flag image" id="thumb">
+    <h2 id="name"></h2>
+    <h3 id="identifier"></h3>
+    <h3 id="owner"></h3>
+    <a id="repbtn" href="/report/{{thread}}">report this thread</a>
+    <p id="sub_count"></p>
+  </div>
+
+  <div id="basic_info_2">
+    <p id="description"></p>
+    <button id="sub_to_thread">Subscribe to thread</button>
+  </div>
+
+  <div id="posts_section">
+    <h2>Posts</h2>
+    <div id="posts_container"></div>
+  </div>
+
+  <script type="module">
+    import { ViewThread } from "/static/scripts/requests.js";
+    import { LoadPosts, RenderThreadView } from "/static/scripts/render.js";
+
+    const threadIdentifier = "{{thread}}";
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      window.location.href = "/login";
+    }
+
+    window.onload = async function () {
+      const { response, result } = await ViewThread(token, threadIdentifier, false);
+      await RenderThreadView(token, threadIdentifier, response, result);
+    };
+  </script>
+
 </body>
 </html>
