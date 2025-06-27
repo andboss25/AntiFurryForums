@@ -98,11 +98,16 @@
       color: red;
       margin: 20px;
     }
-
+    
     #header {
-      width: fit-content;
+      width: 90%;
       background-color: #2a2a2a;
       padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      box-sizing: border-box;
     }
 
     #header a {
@@ -111,6 +116,9 @@
       text-decoration: none;
       padding: 10px;
       font-size: larger;
+      white-space: nowrap;
+      flex-shrink: 0;
+      border-radius: 4px;
     }
 
     #repbtn {
