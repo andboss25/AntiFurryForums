@@ -219,6 +219,20 @@
       }
     }
 
+    function escapeHTML(str) {
+      if (!str) return "";
+      return str.replace(/[&<>"']/g, function (char) {
+        const escapeChars = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        };
+        return escapeChars[char];
+      });
+  }
+
     async function fetchComments() {
       const commentsContainer = document.getElementById("comments_list");
       commentsContainer.innerHTML = "Loading comments...";
@@ -256,7 +270,7 @@
                 <a href="/view/users/${comment.owner_username}">@${comment.owner_username}</a> - ${new Date(comment.timestamp).toLocaleString()}
               </div>
               ${v}
-              <div class="comment_content"><h3>${comment.content}</h3></div>
+              <div class="comment_content"><h3>${escapeHTML(comment.content)}</h3></div>
               <a id="repbtn" href="/report/${comment.id}">report comment</a>
               <button onclick="repl('${comment.owner_username}')">reply to user</button>
             `;
