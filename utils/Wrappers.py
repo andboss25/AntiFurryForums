@@ -1,6 +1,12 @@
 from flask import request, jsonify
 from functools import wraps
 import utils.GeneralUtils as GeneralUtils
+import utils.IpData as IpData
+
+import requests
+import json
+
+configs = json.loads(open("config.json").read())
 
 def logdata():
     def decorator(func):
@@ -53,11 +59,15 @@ def guard_api(addr_list_getter):
                 ip = request.remote_addr
 
             if GeneralUtils.IsIpBlocked(ip):
+                requests.post(configs["webhook_url"], json={"content": f"A banned ip tried accessing the website '{ip}'"})
                 return jsonify({"Error": "This IP is blocked"}), 403
 
             if GeneralUtils.CooldownCheck(ip, addr_list):
                 return jsonify({"Error": "Temporary cooldown triggered, resource requested too many times!"}), 429
-
+            
+            if not IpData.ValidateIp(ip):
+                return jsonify({"Error": "Ip automatically blocked due to VPN or TOR!"}), 429
+            
             return func(*args, **kwargs)
         return wrapper
     return decorator

@@ -111,6 +111,6 @@ def RunApp(App):
     else:
         from waitress import serve
         if configs["revproxy_8080"] == True:
-            serve(App, host='0.0.0.0', port=8080)
+            serve(App, host='0.0.0.0', port=8080,threads=12)
         else:
-            serve(App, host='0.0.0.0', port=80)
+            serve(App, host='0.0.0.0', port=80,threads=12)

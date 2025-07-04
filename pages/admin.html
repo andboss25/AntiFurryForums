@@ -124,6 +124,21 @@
     }
   }
 
+  function escapeHTML(str) {
+      if (!str) return "";
+      return str.replace(/[&<>"']/g, function (char) {
+        const escapeChars = {
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#039;"
+        };
+        return escapeChars[char];
+      });
+  }
+
+
   function populateReports(reports) {
     const tbody = document.querySelector('#reportsTable tbody');
     tbody.innerHTML = '';
@@ -145,9 +160,9 @@
         <td>${report.id}</td>
         <td>${report.username}</td>
         <td>${report.resource_id}</td>
-        <td>${report.type_of_report}</td>
-        <td>${report.type_of_resource}</td>
-        <td>${report.additional_info}</td>
+        <td>${escapeHTML(report.type_of_report)}</td>
+        <td>${escapeHTML(report.type_of_resource)}</td>
+        <td>${escapeHTML(report.additional_info)}</td>
         <td>${report.timestamp}</td>
       `;
 
@@ -217,10 +232,10 @@
       return;
     }
     try {
-      const res = await fetch(`${baseURL}/user/ban`, {
+      const res = await fetch(`${baseURL}/users/ban`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, username })
+        body: JSON.stringify({ token:token, username:username })
       });
       const data = await res.json();
       if (res.ok) {

@@ -1,11 +1,15 @@
 {
     "logfile":true,
     "admin_pass":"ihatefurries",
-    "version": "2.1 (beta)",
+    "version": "2.2 (beta)",
     "revproxy_8080":false,
     "webhook":false,
     "webhook_url":"",
     "test":true,
     "MaxUploadSize":10,
-    "ThreadAdminOnly":true
+    "ThreadAdminOnly":false,
+    "CheckIpViaVPNApi":false,
+    "BlockAllVPNIps":false,
+    "VpnApiKey":"",
+    "testipaddr":""
 }

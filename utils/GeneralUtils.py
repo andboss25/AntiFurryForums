@@ -32,9 +32,10 @@ def TrackIp(usr_name:None,success:bool,path:str,ip):
 def IsIpBlocked(ip):
     cursor,conn = InnitDB()
     
-    if cursor.execute("SELECT * FROM blocked_ip").fetchall():
-        if cursor.execute("SELECT * FROM blocked_ip").fetchall()[0][2] == 1:
-            return True
+    for ip2 in cursor.execute("SELECT * FROM blocked_ip").fetchall():
+        if ip2[1] == ip:
+            if ip2[2] == 1:
+                return True
     
     cursor.close()
     conn.close()
