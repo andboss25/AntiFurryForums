@@ -37,7 +37,7 @@
       font-size: 18px;
     }
 
-    input, textarea, button {
+    textarea, button {
       width: 90%;
       padding: 10px;
       margin-top: 5px;
@@ -48,11 +48,22 @@
       color: white;
     }
 
+    input {
+      width: 90%;
+      padding: 10px;
+      margin-top: 5px;
+      border: none;
+      font-size: 16px;
+      resize: none;
+      color: #cccccc
+    }
+
     button {
       margin-top: 20px;
       background-color: #6e6e6e;
       color: #cccccc;
       font-size: large;
+      cursor: pointer
     }
 
     button:hover {
@@ -62,6 +73,45 @@
     button:active {
       background-color: #cccccc;
       color: #838383;
+    }
+
+    #fileUpload {
+      display: none;
+    }
+
+    .file-upload-btn {
+      display: inline-block;
+      padding: 8px 16px;
+      margin-top: 5px;
+      border: 1px solid #6e6e6e;
+      font-size: 14px;
+      background-color: #6e6e6e;
+      color: #cccccc;
+      text-align: center;
+      cursor: pointer
+    }
+
+    .file-upload-btn:hover {
+      background-color: #838383;
+      border-color: #838383;
+    }
+
+    .file-upload-btn:active {
+      background-color: #cccccc;
+      color: #838383;
+      border-color: #cccccc;
+    }
+
+    .file-selected {
+      background-color: #4a4a4a;
+      color: #ffffff;
+    }
+
+    #fileStatus {
+      margin-top: 5px;
+      font-size: 14px;
+      color: #888888;
+      text-align: center;
     }
 
     #message {
@@ -95,7 +145,11 @@
     </datalist>
 
     <label for="fileUpload">Attachment</label>
+    <div class="file-upload-btn" onclick="document.getElementById('fileUpload').click();" id="fileUploadBtn" style="user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none;">
+      Choose File
+    </div>
     <input type="file" id="fileUpload" accept="image/jpeg,image/png,image/gif,video/mp4">
+    <div id="fileStatus">No file chosen</div>
 
     <button onclick="submitPost()">Submit Post</button>
 
@@ -202,6 +256,19 @@
         errorEl.style.display = "block";
       }
     }
+
+    document.getElementById('fileUpload').addEventListener('change', function(e) {
+      const btn = document.getElementById('fileUploadBtn');
+      const status = document.getElementById('fileStatus');
+      
+      if (e.target.files.length > 0) {
+        status.textContent = e.target.files[0].name;
+        btn.classList.add('file-selected');
+      } else {
+        status.textContent = 'No file chosen';
+        btn.classList.remove('file-selected');
+      }
+    });
   </script>
 </body>
 </html>
