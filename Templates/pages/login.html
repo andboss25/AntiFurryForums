@@ -51,6 +51,12 @@
     #email-field {
       display: none;
     }
+    #button_submit:hover {
+      background-color: #e0e0e0;
+    }
+    #button_submit:active {
+      background-color: #c2c0c0;
+    }
   </style>
 </head>
 <body>
@@ -75,12 +81,12 @@
     <input type="hidden" name="recaptcha_token" id="recaptcha_token" />
 
     <label for="agree_to_policy">
-      <input type="checkbox" name="agree_to_policy" id="agree_to_policy" required /> I agree to the 
-      <a href="/privacy-policy" target="_blank">Privacy Policy</a> and 
-      <a href="/guidlines" target="_blank">Community Guidelines</a>.
+      <input type="checkbox" name="agree_to_policy" id="agree_to_policy" required style="width: 12px; height: 12px;" /> I agree to the 
+      <a href="/privacy-policy" target="_blank" style="color: cadetblue;">Privacy Policy</a> and 
+      <a href="/guidlines" target="_blank" style="color: cadetblue;">Community Guidelines</a>.
     </label>
 
-    <button type="submit">Submit</button>
+    <button type="submit" id="button_submit">Submit</button>
   </form>
 
   <script>
