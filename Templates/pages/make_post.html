@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Create a post</title>
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+  <script src="https://www.google.com/recaptcha/api.js" async defer></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: black;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #form_container {
+      width: 90%;
+      max-width: 600px;
+      background-color: #101010;
+      padding: 20px;
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    label {
+      display: block;
+      margin-top: 15px;
+      font-size: 18px;
+    }
+
+    input, textarea, button {
+      width: 90%;
+      padding: 10px;
+      margin-top: 5px;
+      border: none;
+      font-size: 16px;
+      resize: none;
+      background-color: #1a1a1a;
+      color: white;
+    }
+
+    button {
+      margin-top: 20px;
+      background-color: #6e6e6e;
+      color: #cccccc;
+      font-size: large;
+    }
+
+    button:hover {
+      background-color: #838383;
+    }
+
+    button:active {
+      background-color: #cccccc;
+      color: #838383;
+    }
+
+    #message {
+      margin-top: 20px;
+      color: red;
+      font-weight: bold;
+      display: none;
+    }
+
+    #success {
+      margin-top: 20px;
+      color: lightgreen;
+      font-weight: bold;
+      display: none;
+    }
+
+    .g-recaptcha {
+      margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Create a Post</h1>
+  <div id="form_container">
+    <label for="title">Post Title</label>
+    <input type="text" id="title" maxlength="50" placeholder="Enter post title..." />
+
+    <label for="content">Content (max 300 chars)</label>
+    <textarea id="content" maxlength="300" placeholder="Write your post..."></textarea>
+
+    <label for="thread">Thread to post in (Think of threads kind of like 'subreddits' , posts go in threads and comments go to posts):</label>
+    <input list="threads" id="thread" name="gthread" />
+    <datalist id="threads"></datalist>
+
+    <label for="fileUpload">Attachment</label>
+    <input type="file" id="fileUpload" accept="image/jpeg,image/png,image/gif,video/mp4">
+
+    <div class="g-recaptcha" data-sitekey="{{re_site}}"></div>
+
+    <button onclick="submitPost()">Submit Post</button>
+
+    <p id="message"></p>
+    <p id="success"></p>
+  </div>
+
+  <script>
+    async function Render() {
+      try {
+        const response2 = await fetch('/api/thread/view?' + new URLSearchParams({
+          token: localStorage.getItem("token"),
+          search: false
+        }), { method: 'GET' });
+
+        if (!response2.ok) {
+          throw new Error("Failed to load threads.");
+        }
+
+        const td = await response2.json();
+
+        for (const Thread of td.Threads) {
+          const child = document.createElement("option");
+          child.value = Thread.identifier;
+          document.getElementById("threads").appendChild(child);
+        }
+      } catch (err) {
+        const errorEl = document.getElementById("message");
+        errorEl.innerText = "Unable to load threads.";
+        errorEl.style.display = "block";
+      }
+    }
+    window.addEventListener('DOMContentLoaded', Render);
+
+    async function submitPost() {
+      const fileInput = document.getElementById("fileUpload");
+      const file = fileInput.files[0];
+      const token = localStorage.getItem("token");
+      const formData = new FormData();
+
+      const title = document.getElementById("title").value.trim();
+      const content = document.getElementById("content").value.trim();
+      const threadIdentifier = document.getElementById("thread").value.trim();
+      const errorEl = document.getElementById("message");
+      const successEl = document.getElementById("success");
+
+      errorEl.style.display = "none";
+      successEl.style.display = "none";
+
+      if (!title || !content) {
+        errorEl.innerText = "Both title and content are required.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      const recaptchaToken = grecaptcha.getResponse();
+      if (!recaptchaToken) {
+        errorEl.innerText = "Please complete the reCAPTCHA.";
+        errorEl.style.display = "block";
+        return;
+      }
+
+      let attach = "";
+
+      try {
+        if (file) {
+          const customFile = new File([file], file.name, { type: file.type });
+          formData.append("file", customFile, file.name);
+          formData.append("token", token);
+
+          const uploadResponse = await fetch("/api/images/add", {
+            method: "POST",
+            body: formData
+          });
+
+          if (!uploadResponse.ok) {
+            throw new Error("Upload failed");
+          }
+
+          const uploadData = await uploadResponse.json();
+          attach = uploadData.Url || "";
+        }
+
+        const response = await fetch("/api/post/post", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            content,
+            token,
+            image_attachment: attach,
+            thread_identifier: threadIdentifier,
+            recaptcha_token: recaptchaToken
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          successEl.innerText = "Post created successfully!";
+          successEl.style.display = "block";
+
+          grecaptcha.reset();
+
+          setTimeout(() => {
+            window.location.href = `/view/threads/${threadIdentifier}`;
+          }, 1500);
+        } else {
+          errorEl.innerText = result.Error || "Failed to create post.";
+          errorEl.style.display = "block";
+
+          grecaptcha.reset();
+        }
+      } catch (err) {
+        errorEl.innerText = "An unexpected error occurred.";
+        errorEl.style.display = "block";
+
+        grecaptcha.reset();
+      }
+    }
+  </script>
+</body>
+</html>

@@ -51,14 +51,15 @@ App.config["ADDR_LIST"] = {}
 App.register_blueprint(webpages_bp)
 
 # Api Endpoints
+App.register_blueprint(admin_bp)
 App.register_blueprint(user_bp, url_prefix='/api/user')
 App.register_blueprint(thread_bp , url_prefix='/api/thread')
 App.register_blueprint(post_bp , url_prefix='/api/post')
 App.register_blueprint(comment_bp , url_prefix='/api/comment')
-App.register_blueprint(feed_bp , url_prefix='/api/feed')
 App.register_blueprint(image_bp, url_prefix='/api/images/')
 App.register_blueprint(report_bp,url_prefix='/api/reports/')
-App.register_blueprint(admin_bp)
+App.register_blueprint(feed_bp,url_prefix='/api/feed/')
+
 
 # Run app
 utils.Init.RunApp(App)

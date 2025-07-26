@@ -7,12 +7,15 @@ def InitializeDbStruct():
     conn.execute("""CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username VARCHAR(100) NOT NULL,
+        email TEXT NOT NULL,
         display_name VARCHAR(150) NOT NULL,
         bio TEXT,
         encrypted_password TEXT NOT NULL,
         admin TINYINT(1) NOT NULL DEFAULT 0,
         banned TINYINT(1) NOT NULL DEFAULT 0,
         deleted TINYINT(1) NOT NULL DEFAULT 0,
+        verified TINYINT(1) NOT NULL DEFAULT 0,
+        verification_code TEXT NOT NULL,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         avatar_path TEXT DEFAULT 'static/user.png',
         token TEXT NOT NULL

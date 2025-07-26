@@ -21,10 +21,10 @@ def UploadImage():
     ALLOWED_MIMETYPES = {"image/png", "image/jpeg", "image/gif", "video/mp4"}
 
     cursor, conn = utils.GeneralUtils.InnitDB()
-    
-    token = request.form.get("token")
-    if not token:
-        return jsonify({"Error": "Missing token"}), 400
+
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
 
@@ -68,10 +68,10 @@ def UploadImage():
 def ViewImage(image):
 
     cursor, conn = utils.GeneralUtils.InnitDB()
-
-    token = request.args.get("token")
-    if not token:
-        return jsonify({"Error": "Missing token"}), 400
+    
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
 
     username = utils.GeneralUtils.GetUsernameFromToken(token)
     if not username:

@@ -19,7 +19,7 @@ configs = json.loads(open("config.json").read())
 @post_bp.route("post", methods=["POST"])
 @utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
 @utils.Wrappers.logdata()
-@utils.Wrappers.require_json_with_fields(["title","content","token","thread_identifier"])
+@utils.Wrappers.require_json_with_fields(["title","content","thread_identifier","recaptcha_token"])
 def MakePost():
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
 
@@ -28,6 +28,9 @@ def MakePost():
     title = data["title"]
     content = data["content"]
     thread_identifier = data["thread_identifier"]
+    recaptcha_token = request.json.get("recaptcha_token")
+    if not utils.Captcha.VerifyRecaptcha(recaptcha_token):
+        return jsonify({"Error": "Failed reCAPTCHA verification"}), 403
 
     if (
         len(content) >= 300 or
@@ -52,16 +55,21 @@ def MakePost():
         
     cursor, conn = utils.GeneralUtils.InnitDB()
 
-    user = cursor.execute("SELECT id FROM users WHERE token=?", (data["token"],)).fetchone()
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
+
+    user = cursor.execute("SELECT id FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        
         return jsonify({"Error": "Token is invalid"}), 401
     
+    if not cursor.execute("SELECT id FROM users WHERE token=? AND verified=1", (token,)).fetchone():
+        return jsonify({"Error": "User is not verified!"}), 401
+    
     if not cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (thread_identifier,)).fetchone():
-        
         return jsonify({"Error": "No such thread with this identifier!"}), 400
 
-    username = utils.GeneralUtils.GetUsernameFromToken(data["token"])
+    username = utils.GeneralUtils.GetUsernameFromToken(token)
     cursor.execute(
         "INSERT INTO posts(owner_username,thread_identifier,content,title,image_attachment) VALUES (?, ?, ?, ?, ?)",
         (username,thread_identifier,content,title,image_attachment)
@@ -87,36 +95,72 @@ def MakePost():
 @post_bp.route("view", methods=["GET"])
 @utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
 @utils.Wrappers.logdata()
-@utils.Wrappers.require_query_params(["token", "search"])
+@utils.Wrappers.require_query_params(["search"])
 def ViewPosts():
     data = request.args
-    token = data["token"]
+
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
+
     search = data["search"].lower() == "true"
+    try:
+        limit = int(data.get("limit", 20))
+        last_id = data.get("last_id", None)
+    except:
+        return jsonify({"Error":"Invalid request"}),400
 
     cursor, conn = utils.GeneralUtils.InnitDB()
 
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
-        
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
+    
+    if not cursor.execute("SELECT id FROM users WHERE token=? AND verified=1", (token,)).fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "User is not verified!"}), 401
 
     username = user[0]
 
+    # Handle pagination anchor if last_id is present
+    last_timestamp = None
+    if last_id:
+        result = cursor.execute("SELECT timestamp FROM posts WHERE id = ?", (last_id,)).fetchone()
+        if result:
+            last_timestamp = result[0]
+
+    # Build the base query
+    posts = []
+    query = ""
+    params = []
+
     if search:
         search_for = data.get("search_for", "")
-        query = "SELECT * FROM posts WHERE content LIKE ? OR title LIKE ?"
         like_term = f"%{search_for}%"
-        posts = cursor.execute(query, (like_term, like_term)).fetchall()
+        query = "SELECT * FROM posts WHERE (content LIKE ? OR title LIKE ?)"
+        params.extend([like_term, like_term])
     elif "post_identifier" in data:
-        post_identifier = data["post_identifier"]
-        posts = cursor.execute("SELECT * FROM posts WHERE thread_identifier=?", (post_identifier,)).fetchall()
+        query = "SELECT * FROM posts WHERE thread_identifier = ?"
+        params.append(data["post_identifier"])
     elif "id" in data:
-        posts = cursor.execute("SELECT * FROM posts WHERE id=?", (data["id"],)).fetchall()
+        query = "SELECT * FROM posts WHERE id = ?"
+        params.append(data["id"])
     else:
-        posts = cursor.execute("SELECT * FROM posts").fetchall()
-    
+        query = "SELECT * FROM posts WHERE 1=1"
+
+    if last_timestamp:
+        query += " AND timestamp < ?"
+        params.append(last_timestamp)
+
+    query += " ORDER BY timestamp DESC LIMIT ?"
+    params.append(limit)
+
+    posts = cursor.execute(query, params).fetchall()
+
+    # Fetch liked posts for user
     liked = [row[0] for row in cursor.execute(
         "SELECT post_id FROM liked_posts WHERE username = ?", (username,)
     ).fetchall()]
@@ -124,9 +168,8 @@ def ViewPosts():
     post_list = []
     for post in posts:
         is_liked = str(post[0]) in liked
+        post_likes = cursor.execute("SELECT COUNT(*) FROM liked_posts WHERE post_id = ?", (post[0],)).fetchone()[0]
 
-        post_likes = cursor.execute("SELECT * FROM liked_posts WHERE post_id=?",(post[0],))
-        
         post_dict = {
             "id": post[0],
             "owner_username": post[1],
@@ -136,16 +179,15 @@ def ViewPosts():
             "image_attachment": post[5],
             "liked": is_liked,
             "timestamp": post[6],
-            "likes":len(post_likes.fetchall())
+            "likes": post_likes
         }
         post_list.append(post_dict)
+
     conn.commit()
     cursor.close()
     conn.close()
 
-
     return jsonify({"Message": "Success", "Posts": post_list}), 200
-
 
 # Check if ip is blocked
 # Check if request is JSON
@@ -155,10 +197,12 @@ def ViewPosts():
 @post_bp.route("delete", methods=["DELETE"])
 @utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
 @utils.Wrappers.logdata()
-@utils.Wrappers.require_query_params((["token", "id"]))
+@utils.Wrappers.require_query_params((["id"]))
 def DeletePost():
     data = request.args
-    token = data["token"]
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
     id = data["id"]
 
     cursor, conn = utils.GeneralUtils.InnitDB()
@@ -197,10 +241,12 @@ def DeletePost():
 @post_bp.route("like", methods=["POST"])
 @utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
 @utils.Wrappers.logdata()
-@utils.Wrappers.require_json_with_fields(["token", "id", "action"])
+@utils.Wrappers.require_json_with_fields(["id", "action"])
 def LikePost():
     data = request.json
-    token = data["token"]
+    if 'token' not in request.cookies:
+        return jsonify({"Error": "No token found"}), 403
+    token = request.cookies.get('token')
     id = data["id"]
     action = data["action"].lower()
 
@@ -213,6 +259,11 @@ def LikePost():
         cursor.close()
         conn.close()
         return jsonify({"Error": "Token is invalid"}), 400
+    
+    if not cursor.execute("SELECT id FROM users WHERE token=? AND verified=1", (token,)).fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({"Error": "User is not verified!"}), 401
 
     thread_exists = cursor.execute("SELECT 1 FROM posts WHERE id=?", (id,)).fetchone()
     if not thread_exists:

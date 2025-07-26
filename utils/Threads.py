@@ -1,33 +1,19 @@
-from flask import Blueprint, request, jsonify, current_app
 import requests, json
 import utils
 
-thread_bp = Blueprint('thread', __name__)
 configs = json.loads(open("config.json").read())
 
-# ----------------------- POST /thread -----------------------
-@thread_bp.route("/post", methods=["POST"])
-@utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
-@utils.Wrappers.logdata()
-@utils.Wrappers.require_json_with_fields(["name", "description", "identifier"])
-def MakeThread():
+def MakeThread(token, identifier, name, description):
     forbidden_chars = {" ", "#", "@", "$", "%", "^", "&", "*", "(", ")", "-", "=", "+", "<", ">", "[", "]"}
-    if 'token' not in request.cookies:
-        return jsonify({"Error": "No token found"}), 403
-    token = request.cookies.get('token')
 
     cursor, conn = utils.GeneralUtils.InnitDB()
     user = cursor.execute("SELECT username, admin FROM users WHERE token=?", (token,)).fetchone()
     if not user:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Token is invalid"}), 401
+        return {"status": "error", "message": "Invalid token"}
 
     username, is_admin = user
-    data = request.json
-    name = data["name"]
-    description = data["description"]
-    identifier = data["identifier"]
 
     if (
         len(identifier) >= 25 or
@@ -37,67 +23,54 @@ def MakeThread():
     ):
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Request doesn't respect constraints"}), 400
+        return {"status": "error", "message": "Constraints violated"}
 
     if configs["ThreadAdminOnly"] and is_admin == 0:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Thread creation is disabled for non-admins"}), 403
+        return {"status": "error", "message": "Admins only"}
 
     if cursor.execute("SELECT identifier FROM threads WHERE identifier=?", (identifier,)).fetchone():
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Identifier already used"}), 400
+        return {"status": "error", "message": "Identifier already used"}
 
     cursor.execute(
         "INSERT INTO threads(owner_username, name, identifier, description) VALUES (?, ?, ?, ?)",
         (username, name, identifier, description)
     )
     conn.commit()
-    cursor.close()
-    conn.close()
 
     if configs["webhook"]:
         requests.post(configs["webhook_url"], json={"content": f"{username} created a thread '{identifier}' with name '{name}'"})
 
-    return jsonify({"Message": "Success"}), 200
+    cursor.close()
+    conn.close()
+    return {"status": "success", "message": "Thread created"}
 
-
-# ----------------------- GET /view -----------------------
-@thread_bp.route("/view", methods=["GET"])
-@utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
-@utils.Wrappers.logdata()
-@utils.Wrappers.require_query_params(["search"])
-def ViewThreads():
-    if 'token' not in request.cookies:
-        return jsonify({"Error": "No token found"}), 403
-    token = request.cookies.get('token')
-
+def ViewThreads(token, search=False, search_for="", thread_identifier=None, filter_by_user=None):
     cursor, conn = utils.GeneralUtils.InnitDB()
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Token is invalid"}), 401
+        return {"status": "error", "message": "Invalid token"}
 
     username = user[0]
-    data = request.args
-    search = data["search"].lower() == "true"
 
     if search:
-        search_for = data.get("search_for", "")
         like_term = f"%{search_for}%"
         threads = cursor.execute(
             "SELECT * FROM threads WHERE description LIKE ? OR name LIKE ? OR identifier LIKE ?",
             (like_term, like_term, like_term)
         ).fetchall()
-    elif "thread_identifier" in data:
+    elif thread_identifier:
         threads = cursor.execute(
-            "SELECT * FROM threads WHERE identifier=?", (data["thread_identifier"],)
+            "SELECT * FROM threads WHERE identifier=?", (thread_identifier,)
         ).fetchall()
-    elif "filter_by_user" in data:
+    elif filter_by_user:
         threads = cursor.execute(
-            "SELECT * FROM threads WHERE owner_username=?", (data["filter_by_user"],)
+            "SELECT * FROM threads WHERE owner_username=?", (filter_by_user,)
         ).fetchall()
     else:
         threads = cursor.execute("SELECT * FROM threads").fetchall()
@@ -126,26 +99,15 @@ def ViewThreads():
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"Message": "Success", "Threads": thread_list}), 200
+    return {"status": "success", "threads": thread_list}
 
-
-# ----------------------- DELETE /delete -----------------------
-@thread_bp.route("/delete", methods=["DELETE"])
-@utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
-@utils.Wrappers.logdata()
-@utils.Wrappers.require_query_params(["identifier"])
-def DeleteThread():
-    if 'token' not in request.cookies:
-        return jsonify({"Error": "No token found"}), 403
-    token = request.cookies.get('token')
-
-    identifier = request.args["identifier"]
+def DeleteThread(token, identifier):
     cursor, conn = utils.GeneralUtils.InnitDB()
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Invalid token"}), 401
+        return {"status": "error", "message": "Invalid token"}
 
     username = user[0]
     thread = cursor.execute(
@@ -156,42 +118,30 @@ def DeleteThread():
     if not thread:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Thread not found or not owned by user"}), 404
+        return {"status": "error", "message": "Thread not found or not owned"}
 
     cursor.execute("DELETE FROM threads WHERE identifier=? AND owner_username=?", (identifier, username))
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"Message": "Thread successfully deleted"}), 200
+    return {"status": "success", "message": "Thread deleted"}
 
-
-# ----------------------- POST /subscribe -----------------------
-@thread_bp.route("/subscribe", methods=["POST"])
-@utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
-@utils.Wrappers.logdata()
-@utils.Wrappers.require_json_with_fields(["identifier", "action"])
-def SubscribeThread():
-    if 'token' not in request.cookies:
-        return jsonify({"Error": "No token found"}), 403
-    token = request.cookies.get('token')
-
-    data = request.json
-    identifier = data["identifier"]
-    action = data["action"].lower()
+def SubscribeThread(token, identifier, action):
+    action = action.lower()
 
     cursor, conn = utils.GeneralUtils.InnitDB()
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Invalid token"}), 401
+        return {"status": "error", "message": "Invalid token"}
 
     username = user[0]
     exists = cursor.execute("SELECT 1 FROM threads WHERE identifier=?", (identifier,)).fetchone()
     if not exists:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Thread does not exist"}), 404
+        return {"status": "error", "message": "Thread does not exist"}
 
     if action == "subscribe":
         already = cursor.execute(
@@ -201,7 +151,7 @@ def SubscribeThread():
         if already:
             cursor.close()
             conn.close()
-            return jsonify({"Error": "Already subscribed"}), 400
+            return {"status": "error", "message": "Already subscribed"}
 
         cursor.execute(
             "INSERT INTO subscribed_threads(username, thread_identifier) VALUES (?, ?)",
@@ -215,29 +165,20 @@ def SubscribeThread():
     else:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Action must be either 'subscribe' or 'unsubscribe'"}), 400
+        return {"status": "error", "message": "Invalid action"}
 
     conn.commit()
     cursor.close()
     conn.close()
-    return jsonify({"Message": f"Successfully {action}d to thread"}), 200
+    return {"status": "success", "message": f"{action.capitalize()}d successfully"}
 
-
-# ----------------------- GET /subscriptions -----------------------
-@thread_bp.route("/subscriptions", methods=["GET"])
-@utils.Wrappers.guard_api(lambda: current_app.config["ADDR_LIST"])
-@utils.Wrappers.logdata()
-def ListUserSubscriptions():
-    if 'token' not in request.cookies:
-        return jsonify({"Error": "No token found"}), 403
-    token = request.cookies.get('token')
-
+def ListUserSubscriptions(token):
     cursor, conn = utils.GeneralUtils.InnitDB()
     user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
     if not user:
         cursor.close()
         conn.close()
-        return jsonify({"Error": "Token is invalid"}), 401
+        return {"status": "error", "message": "Invalid token"}
 
     username = user[0]
     subs = cursor.execute(
@@ -247,5 +188,4 @@ def ListUserSubscriptions():
     conn.commit()
     cursor.close()
     conn.close()
-
-    return jsonify({"Message": "Success", "SubscribedThreads": [x[0] for x in subs]}), 200
+    return {"status": "success", "subscriptions": [x[0] for x in subs]}

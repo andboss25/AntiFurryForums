@@ -1,15 +1,22 @@
 {
     "logfile":true,
     "admin_pass":"ihatefurries",
-    "version": "2.2 (beta)",
+    "version": "3.0",
     "revproxy_8080":false,
     "webhook":false,
     "webhook_url":"",
-    "test":true,
+    "test":false,
     "MaxUploadSize":10,
     "ThreadAdminOnly":false,
     "CheckIpViaVPNApi":false,
     "BlockAllVPNIps":false,
     "VpnApiKey":"",
-    "testipaddr":""
+    "testipaddr":"",
+    "re_captcha_secret_key":"",
+    "re_captcha_site_key":"",
+    "re_captcha_enabled":false,
+    "brevo_api_key":"",
+    "blocked_email_domains":[],
+    "custom_message_enabled":false,
+    "custom_message":""
 }

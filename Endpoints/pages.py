@@ -1,125 +1,175 @@
-
 import flask
-from flask import Blueprint, request, jsonify , current_app
-import hashlib, time, requests
-from utils.GeneralUtils import Log
-
+from flask import Blueprint, request, render_template, redirect , Response
 import json
 import random
+from utils.GeneralUtils import Log, IsIpBlocked
+import utils.Posts
+import utils.Threads
+from utils.Wrappers import logdata
 import utils
 
 webpages_bp = Blueprint('webpages', __name__)
 
-configs = json.loads(open("config.json").read())
+with open("config.json") as f:
+    configs = json.load(f)
 
-# Webpages
+def check_block():
+    if IsIpBlocked(request.remote_addr):
+        return render_template("pages/blocked.html"), 403
+    return None
 
 @webpages_bp.route("/")
-@utils.Wrappers.logdata()
+@logdata()
 def LandingPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return open("pages/landing.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/landing.html")
+
+@webpages_bp.route("/robots.txt")
+@logdata()
+def Robots():
+    if (resp := check_block()):
+        return resp
+    with open('robots.txt', 'r') as f:
+        content = f.read()
+    return Response(content, mimetype='text/plain')
+
 
 @webpages_bp.route("/login")
-@utils.Wrappers.logdata()
+@logdata()
 def LoginPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return open("pages/login.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/login.html", re_site=configs['re_captcha_site_key'],error_message='',message_color='red')
 
 @webpages_bp.route("/search")
-@utils.Wrappers.logdata()
+@logdata()
 def SearchPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-
-    return open("pages/search.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/search.html")
 
 @webpages_bp.route("/view/users/<username>")
-@utils.Wrappers.logdata()
+@logdata()
 def ViewUserPage(username):
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return flask.render_template_string(open("pages/view_username.html", encoding="utf-8").read(),username=username)
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/view_username.html", username=username)
 
 @webpages_bp.route("/view/@me")
-@utils.Wrappers.logdata()
+@logdata()
 def ViewMyselfPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return open("pages/view_me.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/view_me.html")
 
 @webpages_bp.route("/view/threads/<thread>")
-@utils.Wrappers.logdata()
+@logdata()
 def ViewThreadPage(thread):
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html", encoding="utf-8").read(),403
-    return flask.render_template_string(open("pages/view_thread.html", encoding="utf-8").read(),thread=thread)
+    if (resp := check_block()):
+        return resp
+
+    if 'token' not in request.cookies:
+        return redirect('/login')
+
+    return render_template(
+        "pages/view_thread.html",
+        thread = thread
+    )
 
 @webpages_bp.route("/threads/create/")
-@utils.Wrappers.logdata()
+@logdata()
 def CreateThread():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-
-    return open("pages/make_thread.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/make_thread.html")
 
 @webpages_bp.route("/app")
-@utils.Wrappers.logdata()
+@logdata()
 def AppPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
+    if (resp := check_block()):
+        return resp
 
-    return flask.render_template_string(open("pages/app.html", encoding="utf-8").read(),version=configs["version"])
+    if 'token' not in request.cookies:
+        return redirect('/login')
+
+    token = request.cookies['token']
+
+    cursor, conn = utils.GeneralUtils.InnitDB()
+    user = cursor.execute("SELECT username FROM users WHERE token=?", (token,)).fetchone()
+    cursor.close()
+    conn.close()
+
+    if not user:
+        return redirect('/login')
+
+    posts = utils.Posts.ViewPosts(token, False)
+    if posts['status'] == 'error':
+        post_error = posts['message']
+        posts = []
+    else:
+        post_error = None
+        posts = posts['posts']
+
+    threads = utils.Threads.ViewThreads(token, False)
+    if threads['status'] == 'error':
+        thread_error = threads['message']
+        threads = []
+    else:
+        thread_error = None
+        threads = threads['threads']
+
+    return render_template(
+        "pages/app.html",
+        version=configs["version"],
+        posts=posts,
+        threads=threads,
+        post_error=post_error,
+        thread_error=thread_error
+    )
 
 @webpages_bp.route("/posts/create/")
-@utils.Wrappers.logdata()
+@logdata()
 def CreatePost():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return flask.render_template_string(open("pages/make_post.html", encoding="utf-8").read())
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/make_post.html", re_site=configs['re_captcha_site_key'])
 
 @webpages_bp.route("/view/post/<post>")
-@utils.Wrappers.logdata()
+@logdata()
 def ViewPostPage(post):
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return flask.render_template_string(open("pages/view_post.html", encoding="utf-8").read(),post=post)
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/view_post.html", post=post)
 
 @webpages_bp.route("/privacy-policy")
-@utils.Wrappers.logdata()
+@logdata()
 def Policy():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-
-    return open("pages/policy.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/policy.html")
 
 @webpages_bp.route("/guidlines")
-@utils.Wrappers.logdata()
+@logdata()
 def Guidlines():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-
-    return open("pages/guidlines.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/guidlines.html")
 
 @webpages_bp.route("/report/<id>")
-@utils.Wrappers.logdata()
+@logdata()
 def ReportPage(id):
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return flask.render_template_string(open("pages/report_form.html", encoding="utf-8").read(),id=id)
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/report_form.html", id=id)
 
-if configs["admin_pass"] == "":
-    randadmin = random.randrange(1000,9999)
-else:
-    randadmin = configs["admin_pass"]
-
+# Generate random admin path
+randadmin = configs["admin_pass"] if configs["admin_pass"] else str(random.randint(1000, 9999))
 Log(f"Admin randid is {randadmin}")
 
-@webpages_bp.route(f"/admin-{str(randadmin)}")
-@utils.Wrappers.logdata()
+@webpages_bp.route(f"/admin-{randadmin}")
+@logdata()
 def AdminPage():
-    if utils.GeneralUtils.IsIpBlocked(request.remote_addr):
-        return open("pages/blocked.html").read(),403
-    return open("pages/admin.html", encoding="utf-8").read()
+    if (resp := check_block()):
+        return resp
+    return render_template("pages/admin.html")

@@ -104,3 +104,11 @@ def Log(content,logfile=configs["logfile"]):
     else:
         print(content)
 
+def GenerateRandomCode(size):
+    idx = 0
+    heap = []
+    while size > idx:
+        idx = idx + 1
+        heap.append(str(random.randint(0,9)))
+    
+    return ''.join(heap)

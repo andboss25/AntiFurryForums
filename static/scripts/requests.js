@@ -3,7 +3,8 @@ const ApiEndpoint = "/api/";
 // GET request with query params
 export async function GetRequestWithParams(url, params) {
     const response = await fetch(`${url}?${params}`, {
-        method: 'GET'
+        method: 'GET',
+        credentials: 'include'  // <-- Include cookies!
     });
 
     let result;
@@ -20,6 +21,7 @@ export async function GetRequestWithParams(url, params) {
 export async function PostRequestWithBody(url, params) {
     const response = await fetch(url, {
         method: 'POST',
+        credentials: 'include',  // <-- Include cookies!
         headers: {
             'Content-Type': 'application/json'
         },
@@ -54,33 +56,28 @@ export async function Signup(Username, Password) {
 
 // THREAD API
 
-export async function ViewThread(Token,Identifier,Search) {
-    return GetRequestWithParams(ApiEndpoint  + "thread/view", new URLSearchParams({
-        token:Token,
-        thread_identifier: Identifier,
-        search: false
+export async function ViewThread(identifier, search) {
+    return GetRequestWithParams(ApiEndpoint + "thread/view", new URLSearchParams({
+        thread_identifier: identifier,
+        search: search
     }));
 }
 
-// POST API 
+// POST API
 
-export async function LikePost(Token,Id,Action) {
-    return PostRequestWithBody(ApiEndpoint  + "post/like",{
-        token:Token,
-        id: Id,
-        action: Action
+export async function LikePost(id, action) {
+    return PostRequestWithBody(ApiEndpoint + "post/like", {
+        id: id,
+        action: action
     });
 }
 
 // FEED API
-export async function PostFeed(Token) {
-    return GetRequestWithParams(ApiEndpoint  + "feed/post", new URLSearchParams({
-        token:Token
-    }));
+
+export async function PostFeed(params = "") {
+    return GetRequestWithParams(ApiEndpoint + "feed/post", params);
 }
 
-export async function ThreadFeed(Token) {
-    return GetRequestWithParams(ApiEndpoint  + "feed/thread", new URLSearchParams({
-        token:Token
-    }));
+export async function ThreadFeed() {
+    return GetRequestWithParams(ApiEndpoint + "feed/thread", "");
 }

@@ -199,23 +199,55 @@
   <div id="posts_section">
     <h2>Posts</h2>
     <div id="posts_container"></div>
+    <button id="load_more_btn" style="margin-top: 20px; padding: 10px 20px; font-size: 18px; background: #2a2a2a; color: white; border: none; border-radius: 6px; cursor: pointer;">Load More</button>
   </div>
 
   <script type="module">
-    import { ViewThread } from "/static/scripts/requests.js";
-    import { LoadPosts, RenderThreadView } from "/static/scripts/render.js";
+import { ViewThread } from "/static/scripts/requests.js";
+import { LoadPosts, RenderThreadView } from "/static/scripts/render.js";
 
-    const threadIdentifier = "{{thread}}";
-    const token = localStorage.getItem("token");
+const threadIdentifier = "{{thread}}";
 
-    if (!token) {
-      window.location.href = "/login";
+let lastPostId = null;
+const LIMIT = 10;
+
+window.onload = async function () {
+  const message = document.getElementById("message");
+  const postContainer = document.getElementById("posts_container");
+  const loadMoreBtn = document.getElementById("load_more_btn");
+
+  async function loadPosts(append = false) {
+    const query = new URLSearchParams({
+      post_identifier: threadIdentifier,
+      search: false,
+      limit: LIMIT,
+      ...(lastPostId && { last_id: lastPostId })
+    });
+
+    const response = await fetch('/api/post/view?' + query.toString(), {
+      credentials: 'include'
+    });
+
+    const result = await response.json();
+
+    await LoadPosts(postContainer, message, response, result, append);
+
+    if (result.Posts && result.Posts.length > 0) {
+      lastPostId = result.Posts[result.Posts.length - 1].id;
+    } else {
+      loadMoreBtn.style.display = "none";
     }
+  }
 
-    window.onload = async function () {
-      const { response, result } = await ViewThread(token, threadIdentifier, false);
-      await RenderThreadView(token, threadIdentifier, response, result);
-    };
+  loadMoreBtn.onclick = () => loadPosts(true);
+
+  // Load thread info + initial posts
+  const { response, result } = await ViewThread(threadIdentifier, false);
+  await RenderThreadView(threadIdentifier, response, result);
+
+  await loadPosts(false);
+};
+
   </script>
 
 </body>

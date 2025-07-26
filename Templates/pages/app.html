@@ -22,21 +22,14 @@
       margin-top: 20px;
     }
 
-    #posts_section {
+    #posts_section, #threads_section {
       width: 90%;
       background-color: #101010;
       margin: 20px;
       padding: 10px;
     }
 
-    #threads_section {
-      width: 90%;
-      background-color: #101010;
-      margin: 20px;
-      padding: 10px;
-    }
-
-    .post_card {
+    .post_card, .thread_card {
       background-color: #1a1a1a;
       margin: 10px 0;
       padding: 10px;
@@ -98,7 +91,7 @@
       color: red;
       margin: 20px;
     }
-    
+
     #header {
       width: 90%;
       background-color: #2a2a2a;
@@ -131,21 +124,14 @@
       text-decoration: none;
     }
 
-    .thread_card {
-      background-color: #1f1f1f;
-      margin: 10px 0;
-      padding: 10px;
-    }
-
-    .thread_name{
+    .thread_name {
       margin: 0;
     }
 
-    #postimg{
+    #postimg {
       max-width: 300px;
       max-height: 300px;
     }
-
   </style>
 </head>
 <body>
@@ -170,46 +156,59 @@
   <div id="posts_section">
     <h2>Posts</h2>
     <div id="posts_container"></div>
+    <button id="load_more_btn" style="margin: 20px; padding: 10px 20px; font-size: 18px; background: #2a2a2a; color: white; border: none; border-radius: 6px; cursor: pointer;">Load More</button>
   </div>
 
   <script type="module">
-    import { PostFeed , ThreadFeed , LikePost } from "/static/scripts/requests.js";
-    import { LoadPosts , LoadThreads }  from "/static/scripts/render.js";
+import { PostFeed, ThreadFeed } from "/static/scripts/requests.js";
+import { LoadPosts, LoadThreads } from "/static/scripts/render.js";
 
-    window.onload = async function () {
-      const token = localStorage.getItem("token");
+let lastPostId = null;
+const LIMIT = 10;
 
-      if (!token) {
-        window.location.href = "/login";
-        return;
+window.onload = async function () {
+  const postContainer = document.getElementById("posts_container");
+  const threadContainer = document.getElementById("threads_container");
+  const message = document.getElementById("message");
+  const loadMoreBtn = document.getElementById("load_more_btn");
+
+  if (!postContainer || !threadContainer || !message || !loadMoreBtn) {
+    console.error("Required DOM elements not found.");
+    return;
+  }
+
+  async function fetchPosts(append = false) {
+    const params = new URLSearchParams({
+      limit: LIMIT,
+      ...(lastPostId && { last_id: lastPostId })
+    });
+
+    try {
+      const { response, result } = await PostFeed(params.toString());
+      await LoadPosts(postContainer, message, response, result, append);
+      if (result.Posts && result.Posts.length > 0) {
+        lastPostId = result.Posts[result.Posts.length - 1].id;
+      } else {
+        loadMoreBtn.style.display = "none"; // No more posts
       }
+    } catch (err) {
+      console.error("Error loading posts:", err);
+      message.innerText = "Could not load posts.";
+    }
+  }
 
-      const postContainer = document.getElementById("posts_container");
-      const threadContainer = document.getElementById("threads_container");
-      const message = document.getElementById("message");
+  loadMoreBtn.onclick = () => fetchPosts(true);
 
-      if (!postContainer || !threadContainer || !message) {
-        console.error("Required DOM elements not found.");
-        return;
-      }
+  await fetchPosts(false); // Initial load
 
-      try {
-        const { response, result } = await PostFeed(token);
-        LoadPosts(token, postContainer, message, response, result);
-      } catch (err) {
-        console.error("Error loading posts:", err);
-        message.innerText = "Could not load posts.";
-      }
-
-      try {
-        const { response: tresponse, result: tresult } = await ThreadFeed(token);
-        LoadThreads(threadContainer, tresponse, tresult);
-      } catch (err) {
-        console.error("Error loading threads:", err);
-        threadContainer.innerHTML = "<p>Could not load recommended threads.</p>";
-      }
-    };
-
+  try {
+    const { response: tresponse, result: tresult } = await ThreadFeed();
+    LoadThreads(threadContainer, tresponse, tresult);
+  } catch (err) {
+    console.error("Error loading threads:", err);
+    threadContainer.innerHTML = "<p>Could not load recommended threads.</p>";
+  }
+};
 
   </script>
 </body>

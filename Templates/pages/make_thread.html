@@ -102,7 +102,6 @@
       const name = document.getElementById("name").value.trim();
       const identifier = document.getElementById("identifier").value.trim();
       const description = document.getElementById("description").value.trim();
-      const token = localStorage.getItem("token");
 
       const errorEl = document.getElementById("message");
       const successEl = document.getElementById("success");
@@ -119,7 +118,7 @@
         const response = await fetch("/api/thread/post", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, description, identifier, token })
+          body: JSON.stringify({ name, description, identifier})
         });
 
         const result = await response.json();

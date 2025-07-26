@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin Panel</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+  input, button, select { padding: 8px; margin: 5px 0; width: 100%; max-width: 300px; }
+  button { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+  th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+  th { background: #eee; }
+  .error { color: red; }
+  .success { color: green; }
+  .section { margin-bottom: 40px; }
+</style>
+</head>
+<body>
+
+<h1>Admin Panel</h1>
+
+<div class="section" id="tokenSection">
+  <button onclick="loadReports()">View Reports</button>
+  <button onclick="loadUsers()">View Users</button>
+  <p id="tokenError" class="error"></p>
+</div>
+
+<div class="section" id="reportsSection" style="display:none;">
+  <h2>Reported Resources</h2>
+  <table id="reportsTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+        <th>Resource ID</th>
+        <th>Report Type</th>
+        <th>Resource Type</th>
+        <th>Additional Info</th>
+        <th>Timestamp</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="section" id="UserSection" style="display:none;">
+  <h2>Users</h2>
+  <table id="UsersTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Username</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div class="section" id="banSection" style="display:none;">
+  <h2>Ban/Unban Users</h2>
+
+  <label for="banUsername">Username to Ban:</label>
+  <input type="text" id="banUsername" placeholder="Username to ban" />
+  <button onclick="banUser()">Ban User</button>
+  <p id="banResult"></p>
+
+  <div class="section" id="ipBanSection" style="display:none;">
+  <h2>Ban User's IPs</h2>
+  <label for="ipBanUsername">Username to Ban Their IPs:</label>
+  <input type="text" id="ipBanUsername" placeholder="Username to ban all their IPs" />
+  <button onclick="banUserIps()">Ban User's IPs</button>
+  <p id="ipBanResult"></p>
+  </div>
+
+  <label for="unbanUsername" style="margin-top:20px;">Username to Unban:</label>
+  <input type="text" id="unbanUsername" placeholder="Username to unban" />
+  <button onclick="unbanUser()">Unban User</button>
+  <p id="unbanResult"></p>
+</div>
+
+<div class="section" id="banwaveSection" style="display:none;">
+  <h2 style="color: darkred;">Banwave Wipe</h2>
+  <label for="banwaveKeyword">Keyword (partial username):</label>
+  <input type="text" id="banwaveKeyword" placeholder="Enter keyword (e.g. %furry%)" />
+  <button onclick="triggerBanwave()">Execute Banwave</button>
+  <p id="banwaveResult"></p>
+</div>
+
+<div class="section" id="tokenLookupSection" style="display:none;">
+  <h2>Lookup User Token</h2>
+  <label for="lookupUsername">Username:</label>
+  <input type="text" id="lookupUsername" placeholder="Username to lookup" />
+  <button onclick="lookupToken()">Get Token</button>
+  <pre id="lookupResult"></pre>
+</div>
+
+<div class="section" id="purgeSection" style="display:none;">
+  <h2>Purge Data</h2>
+
+  <label for="purgePostId">Post ID to Purge:</label>
+  <input type="text" id="purgePostId" placeholder="Post ID" />
+  <button onclick="purgePost()">Purge Post</button>
+  <p id="purgePostResult"></p>
+
+  <label for="purgeUsername">Username to Purge:</label>
+  <input type="text" id="purgeUsername" placeholder="Username" />
+  <button onclick="purgeUser()">Purge User</button>
+  <p id="purgeUserResult"></p>
+
+  <label for="purgeThreadId">Thread Identifier to Purge:</label>
+  <input type="text" id="purgeThreadId" placeholder="Thread Identifier" />
+  <button onclick="purgeThread()">Purge Thread</button>
+  <p id="purgeThreadResult"></p>
+</div>
+
+<div class="section" id="relatedUsersSection" style="display:none;">
+  <h2>Find Related Users by IP</h2>
+  <label for="relatedUsername">Username:</label>
+  <input type="text" id="relatedUsername" placeholder="Enter username" />
+  <button onclick="findRelatedUsers()">Find Related Users</button>
+  <p id="relatedUsersError" class="error"></p>
+  <ul id="relatedUsersList"></ul>
+</div>
+
+<div class="section" id="shutdownSection" style="display:none;">
+  <h2 style="color: red;">Emergency Shutdown</h2>
+  <button style="background-color: orange; color: white;" onclick="triggerShutdown('shutweb')">Shut Web Only</button>
+  <button style="background-color: red; color: white;" onclick="triggerShutdown('shutall')">Shut Down Entire Server</button>
+  <p id="shutdownResult"></p>
+</div>
+
+<script>
+  const baseURL = '/api';
+
+  function showError(elementId, message) {
+    const el = document.getElementById(elementId);
+    el.textContent = message;
+    el.style.display = message ? 'block' : 'none';
+  }
+
+  async function loadReports() {
+    showError('tokenError', '');
+
+    try {
+      const res = await fetch(`${baseURL}/reports/view?`);
+      if (res.status === 404) {
+        showError('tokenError', 'Not authorized or resource not found');
+        document.getElementById('reportsSection').style.display = 'none';
+        document.getElementById('banSection').style.display = 'none';
+        document.getElementById('banwaveSection').style.display = 'none';
+        document.getElementById('tokenLookupSection').style.display = 'none';
+        document.getElementById('purgeSection').style.display = 'none';
+        document.getElementById('shutdownSection').style.display = 'none';
+        document.getElementById('relatedUsersSection').style.display = 'none';
+        document.getElementById('ipBanSection').style.display = 'none';
+
+        return;
+      }
+      const data = await res.json();
+      if (data.Message !== 'Success') return showError('tokenError', 'Failed to load reports');
+      populateReports(data.Reports);
+      document.getElementById('reportsSection').style.display = 'block';
+      document.getElementById('banSection').style.display = 'block';
+      document.getElementById('banwaveSection').style.display = 'block';
+      document.getElementById('tokenLookupSection').style.display = 'block';
+      document.getElementById('purgeSection').style.display = 'block';
+      document.getElementById('shutdownSection').style.display = 'block';
+      document.getElementById('relatedUsersSection').style.display = 'block';
+      document.getElementById('ipBanSection').style.display = 'block';
+
+    } catch (err) {
+      console.error(err);
+      showError('tokenError', 'Error fetching reports');
+    }
+  }
+
+  function escapeHTML(str) {
+    if (!str) return "";
+    return str.replace(/[&<>"']/g, char => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+    }[char]));
+  }
+
+  function populateReports(reports) {
+    const tbody = document.querySelector('#reportsTable tbody');
+    tbody.innerHTML = '';
+    if (!reports.length) {
+      tbody.innerHTML = '<tr><td colspan="7">No reports found</td></tr>';
+      return;
+    }
+    for (const report of reports) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${report.id}</td>
+        <td>${report.username}</td>
+        <td>${report.resource_id}</td>
+        <td>${escapeHTML(report.type_of_report)}</td>
+        <td>${escapeHTML(report.type_of_resource)}</td>
+        <td>${escapeHTML(report.additional_info)}</td>
+        <td>${report.timestamp}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function loadUsers() {
+    showError('tokenError', '');
+
+    try {
+      const res = await fetch(`${baseURL}/user/viewall`);
+      const data = await res.json();
+      if (!res.ok || data.Error) {
+        showError('tokenError', data.Error || 'Failed to load users');
+        document.getElementById('UserSection').style.display = 'none';
+        return;
+      }
+      populateUsers(data.Users);
+      document.getElementById('UserSection').style.display = 'block';
+    } catch (err) {
+      console.error(err);
+      showError('tokenError', 'Error fetching users');
+    }
+  }
+
+  function populateUsers(users) {
+    const tbody = document.querySelector('#UsersTable tbody');
+    tbody.innerHTML = '';
+    if (!users?.length || users.Message === 'No users found!') {
+      tbody.innerHTML = '<tr><td colspan="2">No users found</td></tr>';
+      return;
+    }
+    for (const user of users) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${user[1]}</td><td>${user[0]}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  async function banUser() {
+    await modifyUser('ban', 'banUsername', 'banResult');
+  }
+
+  async function unbanUser() {
+    await modifyUser('unban', 'unbanUsername', 'unbanResult');
+  }
+
+  async function modifyUser(action, inputId, resultId) {
+    const username = document.getElementById(inputId).value.trim();
+    const resultEl = document.getElementById(resultId);
+    resultEl.textContent = '';
+    if (!username) {
+      resultEl.textContent = 'Username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+    try {
+      const res = await fetch(`${baseURL}/users/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || `User ${action}ed`) : (data.Error || `Error during ${action}`);
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function findRelatedUsers() {
+    const username = document.getElementById("relatedUsername").value.trim();
+    const errorEl = document.getElementById("relatedUsersError");
+    const listEl = document.getElementById("relatedUsersList");
+
+    errorEl.textContent = "";
+    listEl.innerHTML = "";
+
+    if (!username) {
+      errorEl.textContent = "Please enter a username.";
+      return;
+    }
+
+    try {
+      const url = `/api/admin/findrelusers?username=${encodeURIComponent(username)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (!res.ok || data.Message !== "Success") {
+        errorEl.textContent = data.Message || "Failed to fetch related users";
+        return;
+      }
+
+      if (!data.Users || data.Users.length === 0) {
+        listEl.innerHTML = "<li>No related users found.</li>";
+        return;
+      }
+
+      for (const user of data.Users) {
+        const li = document.createElement("li");
+        li.textContent = user;
+        listEl.appendChild(li);
+      }
+    } catch (error) {
+      errorEl.textContent = "Error fetching related users";
+      console.error(error);
+    }
+  }
+
+  async function banUserIps() {
+    const username = document.getElementById('ipBanUsername').value.trim();
+    const resultEl = document.getElementById('ipBanResult');
+    resultEl.textContent = '';
+
+    if (!username) {
+      resultEl.textContent = 'Username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+    try {
+      const res = await fetch(`${baseURL}/users/ipban`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || "IPs banned") : (data.Error || "Error banning IPs");
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function triggerBanwave() {
+    const keyword = document.getElementById('banwaveKeyword').value.trim();
+    const resultEl = document.getElementById('banwaveResult');
+    resultEl.textContent = '';
+
+    if (!keyword) {
+      resultEl.textContent = 'Keyword required';
+      resultEl.style.color = 'red';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/admin/banwave`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword }),
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || 'Banwave executed') : (data.Error || 'Error executing banwave');
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function lookupToken() {
+    const username = document.getElementById('lookupUsername').value.trim();
+    const resultEl = document.getElementById('lookupResult');
+    resultEl.textContent = '';
+
+    if (!username) {
+      resultEl.textContent = 'Username required';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/users/token?username=${encodeURIComponent(username)}`);
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        resultEl.textContent = JSON.stringify(data, null, 2);
+      } else {
+        resultEl.textContent = data.Error || 'User token not found';
+      }
+    } catch {
+      resultEl.textContent = 'Request failed';
+    }
+  }
+
+  async function purgePost() {
+    const postId = document.getElementById('purgePostId').value.trim();
+    const resultEl = document.getElementById('purgePostResult');
+    resultEl.textContent = '';
+
+    if (!postId) {
+      resultEl.textContent = 'Post ID required';
+      resultEl.style.color = 'red';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/admin/purge_post`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId }),
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || 'Post purged') : (data.Error || 'Error purging post');
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function purgeUser() {
+    const username = document.getElementById('purgeUsername').value.trim();
+    const resultEl = document.getElementById('purgeUserResult');
+    resultEl.textContent = '';
+
+    if (!username) {
+      resultEl.textContent = 'Username required';
+      resultEl.style.color = 'red';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/admin/purge_user`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || 'User purged') : (data.Error || 'Error purging user');
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function purgeThread() {
+    const threadId = document.getElementById('purgeThreadId').value.trim();
+    const resultEl = document.getElementById('purgeThreadResult');
+    resultEl.textContent = '';
+
+    if (!threadId) {
+      resultEl.textContent = 'Thread identifier required';
+      resultEl.style.color = 'red';
+      return;
+    }
+
+    try {
+      const res = await fetch(`${baseURL}/admin/purge_thread`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ thread_identifier: threadId }),
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || 'Thread purged') : (data.Error || 'Error purging thread');
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+
+  async function triggerShutdown(type) {
+    const resultEl = document.getElementById('shutdownResult');
+    resultEl.textContent = '';
+
+    try {
+      const res = await fetch(`${baseURL}/admin/${type}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({"type":"nun here"})
+      });
+      const data = await res.json();
+      resultEl.textContent = res.ok ? (data.Message || 'Shutdown triggered') : (data.Error || 'Error triggering shutdown');
+      resultEl.style.color = res.ok ? 'green' : 'red';
+    } catch {
+      resultEl.textContent = 'Request failed';
+      resultEl.style.color = 'red';
+    }
+  }
+</script>
+
+</body>
+</html>

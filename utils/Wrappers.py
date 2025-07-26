@@ -72,7 +72,7 @@ def guard_api(addr_list_getter):
         return wrapper
     return decorator
 
-def require_json_with_fields(required_fields: list):
+def require_json_with_fields(required_fields: list, nolist=True):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -86,15 +86,26 @@ def require_json_with_fields(required_fields: list):
             except Exception:
                 return jsonify({"Error": "Malformed JSON"}), 400
 
-            missing = [field for field in required_fields if field not in data or not data[field]]
+            # Check for missing fields
+            missing = [field for field in required_fields if field not in data or data[field] in [None, ""]]
             if missing:
-                # Optional: log the failure
                 return jsonify({"Error": f"Missing one or more required fields: {', '.join(missing)}"}), 400
+
+            # Type validation
+            if nolist:
+                invalid_type_fields = [
+                    field for field in required_fields
+                    if not isinstance(data[field], (str, int, float))
+                ]
+                if invalid_type_fields:
+                    return jsonify({
+                        "Error": f"Invalid type for fields: {', '.join(invalid_type_fields)}. "
+                                 f"Only strings and numbers are allowed."
+                    }), 400
 
             return func(*args, **kwargs)
         return wrapper
     return decorator
-
 
 def require_query_params(required_fields: list):
     def decorator(func):
@@ -102,7 +113,20 @@ def require_query_params(required_fields: list):
         def wrapper(*args, **kwargs):
             missing = [field for field in required_fields if not request.args.get(field)]
             if missing:
-                # Optional: IP tracking on error
+                return jsonify({
+                    "Error": f"Missing one or more required query parameters: {', '.join(missing)}"
+                }), 400
+
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def require_form_params(required_fields: list):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            missing = [field for field in required_fields if not request.form.get(field)]
+            if missing:
                 return jsonify({
                     "Error": f"Missing one or more required query parameters: {', '.join(missing)}"
                 }), 400
