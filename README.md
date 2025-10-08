@@ -1,4 +1,6 @@
-# AntiFurryForums V1.9
+# AntiFurryForums V1.9 OLD
+
+**ARCHIVED CODE NO LONGER IN USE AS A NEW VERSION IS BEING REWRITTEN AS CLOSED SOURCE SOFTWARE!**
 
 **This project was created by anti-furries , in a team called "Anti-furry network"**
 **Feel free to contribute (especially the frontend)**
